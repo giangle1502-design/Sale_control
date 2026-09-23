@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==== Email quản trị gốc (sửa cho khớp VITE_SUPER_ADMINS) ====
+    function superAdmins() { return ['giangle1502@gmail.com']; }
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email != null
+        && request.auth.token.email_verified == true;
+    }
+    function me() { return request.auth.token.email.lower(); }
+    function staffPath() { return /databases/$(database)/documents/staff/$(me()); }
+    function isStaff() {
+      return signedIn() && (me() in superAdmins()
+        || (exists(staffPath()) && get(staffPath()).data.active != false));
+    }
+    function isAdmin() {
+      return signedIn() && (me() in superAdmins()
+        || (exists(staffPath()) && get(staffPath()).data.role == 'admin' && get(staffPath()).data.active != false));
+    }
+    function ownsExisting() { return resource.data.ownerEmail == me(); }
+    function ownsNew() { return request.resource.data.ownerEmail == me(); }
+
+    // Danh sách nhân viên: ai trong công ty cũng đọc được (để hiện tên), chỉ admin sửa
+    match /staff/{email} {
+      allow read: if signedIn() && (isStaff() || email == me());
+      allow write: if isAdmin();
+    }
+
+    // Cài đặt chung
+    match /settings/{id} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+
+    // Dữ liệu của từng nhân viên: sale chỉ thấy/sửa dữ liệu của mình, admin thấy tất cả
+    match /{coll}/{id} {
+      allow read: if (coll in ['customers', 'activities', 'orders', 'payments'])
+        && isStaff() && (isAdmin() || ownsExisting());
+      allow create: if (coll in ['customers', 'activities', 'orders', 'payments'])
+        && isStaff() && (isAdmin() || ownsNew());
+      allow update: if (coll in ['customers', 'activities', 'orders', 'payments'])
+        && isStaff() && (isAdmin() || (ownsExisting() && ownsNew()));
+      allow delete: if (coll in ['customers', 'activities', 'orders', 'payments'])
+        && isStaff() && (isAdmin() || ownsExisting());
+    }
+
+    // Báo cáo ngày: id = <ngày>_<email>
+    match /dailyNotes/{noteId} {
+      allow read: if isStaff() && (isAdmin() || resource == null || ownsExisting());
+      allow create, update: if isStaff() && (isAdmin()
+        || (ownsNew() && noteId == request.resource.data.date + '_' + me()));
+      allow delete: if isAdmin();
+    }
+
+    // Công việc: ownerEmail = người thực hiện
+    match /tasks/{id} {
+      allow read: if isStaff() && (isAdmin() || ownsExisting());
+      allow create: if isStaff() && (isAdmin()
+        || (ownsNew() && request.resource.data.createdBy == me()));
+      allow update: if isStaff() && (isAdmin()
+        || (resource.data.createdBy == me() && ownsExisting() && ownsNew())
+        || (ownsExisting() && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'progress', 'completedDate', 'comments', 'custom', 'updatedAt', 'updatedBy', 'ownerName'])));
+      allow delete: if isStaff() && (isAdmin() || resource.data.createdBy == me());
+    }
+
+    // Nhật ký gửi email: chỉ server ghi (Admin SDK bỏ qua rules), admin xem
+    match /reportLogs/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+  }
+}
