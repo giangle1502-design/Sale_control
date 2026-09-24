@@ -54,16 +54,16 @@ export default async function handler(req, res) {
     if (!recipients.length) return res.status(400).json({ error: 'Chưa có email nhận báo cáo trong Cài đặt' });
 
     const byDate = (c, field = 'date') => list(db.collection(c).where(field, '==', date));
-    const [activities, orders, payments, notes, customers, tasks, staffList] = await Promise.all([
-      byDate('activities'), byDate('orders'), byDate('payments'), byDate('dailyNotes'),
+    const [activities, quotes, orders, payments, notes, customers, tasks, staffList] = await Promise.all([
+      byDate('activities'), byDate('quotes'), byDate('orders'), byDate('payments'), byDate('dailyNotes'),
       byDate('customers', 'createdDate'), list(db.collection('tasks')),
       (await db.collection('staff').get()).docs.map((d) => ({ email: d.id, ...d.data() })),
     ]);
 
-    const rep = buildReport({ activities, orders, payments, tasks, notes, customers, staffList, from: date, to: date });
+    const rep = buildReport({ activities, quotes, orders, payments, tasks, notes, customers, staffList, from: date, to: date });
     const html = renderEmail({
       rep, date, config, appUrl: process.env.APP_URL,
-      data: { activities, orders, payments, notes, tasks, staffList },
+      data: { activities, quotes, orders, payments, notes, tasks, staffList },
     });
 
     const transporter = nodemailer.createTransport({

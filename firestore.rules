@@ -36,13 +36,13 @@ service cloud.firestore {
 
     // Dữ liệu của từng nhân viên: sale chỉ thấy/sửa dữ liệu của mình, admin thấy tất cả
     match /{coll}/{id} {
-      allow read: if (coll in ['customers', 'activities', 'orders', 'payments'])
+      allow read: if (coll in ['customers', 'activities', 'quotes', 'orders', 'payments'])
         && isStaff() && (isAdmin() || ownsExisting());
-      allow create: if (coll in ['customers', 'activities', 'orders', 'payments'])
+      allow create: if (coll in ['customers', 'activities', 'quotes', 'orders', 'payments'])
         && isStaff() && (isAdmin() || ownsNew());
-      allow update: if (coll in ['customers', 'activities', 'orders', 'payments'])
+      allow update: if (coll in ['customers', 'activities', 'quotes', 'orders', 'payments'])
         && isStaff() && (isAdmin() || (ownsExisting() && ownsNew()));
-      allow delete: if (coll in ['customers', 'activities', 'orders', 'payments'])
+      allow delete: if (coll in ['customers', 'activities', 'quotes', 'orders', 'payments'])
         && isStaff() && (isAdmin() || ownsExisting());
     }
 
@@ -64,6 +64,12 @@ service cloud.firestore {
         || (ownsExisting() && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(['status', 'progress', 'completedDate', 'comments', 'custom', 'updatedAt', 'updatedBy', 'ownerName'])));
       allow delete: if isStaff() && (isAdmin() || resource.data.createdBy == me());
+    }
+
+    // Công nợ nhập từ phần mềm kế toán: sale xem khách của mình, chỉ quản trị nhập
+    match /receivables/{id} {
+      allow read: if isStaff() && (isAdmin() || ownsExisting());
+      allow write: if isAdmin();
     }
 
     // Nhật ký gửi email: chỉ server ghi (Admin SDK bỏ qua rules), admin xem

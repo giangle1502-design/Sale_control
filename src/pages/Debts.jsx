@@ -5,6 +5,7 @@ import { ensureCustomer, removeDoc, saveDoc, scopedQuery } from '../lib/data';
 import { fmtDate, fmtMoney, num, orderAmount, REVENUE_STATUSES, today } from '../lib/utils';
 import { exportSheets } from '../lib/excel';
 import CustomerPicker from '../components/CustomerPicker';
+import Receivables from './Receivables';
 import {
   confirmDelete, CustomFieldInputs, customValue, Empty, ErrorBox, Field, FilterBar, Modal, Stat, useRange,
 } from '../components/ui';
@@ -36,10 +37,10 @@ export function computeDebts(orders, payments, ref = today()) {
 }
 
 export default function Debts() {
-  const { email, isAdmin, profile, config, staffName } = useApp();
+  const { email, isAdmin, profile, config, staffName, staffList } = useApp();
   const [range, setRange] = useRange('Tháng này');
   const [staff, setStaff] = useState('');
-  const [tab, setTab] = useState('debt');
+  const [tab, setTab] = useState('acc');
   const [edit, setEdit] = useState(null);
   const fields = config.customFields.payments || [];
   const scope = { me: email, isAdmin, staffFilter: staff };
@@ -69,21 +70,27 @@ export default function Debts() {
     })),
   });
 
+  const TABS = [['acc', 'Công nợ (số liệu kế toán)'], ['debt', 'Công nợ tính theo đơn hàng'], ['pay', 'Phiếu thu']];
   return (
     <>
       <div className="page-head">
         <h1>Công nợ & Thu tiền</h1>
         <div className="actions">
-          <button className="btn" onClick={doExport}>⬇ Excel</button>
+          {tab !== 'acc' && <button className="btn" onClick={doExport}>⬇ Excel</button>}
           <button className="btn primary" onClick={() => setEdit(blank())}>+ Ghi thu tiền</button>
         </div>
       </div>
-      <FilterBar range={range} setRange={setRange} staff={staff} setStaff={setStaff}>
-        <div className="presets">
-          <button className={'chip' + (tab === 'debt' ? ' on' : '')} onClick={() => setTab('debt')}>Công nợ theo KH</button>
-          <button className={'chip' + (tab === 'pay' ? ' on' : '')} onClick={() => setTab('pay')}>Phiếu thu trong kỳ</button>
-        </div>
-      </FilterBar>
+      <div className="presets" style={{ marginBottom: 10 }}>
+        {TABS.map(([k, l]) => <button key={k} className={'chip' + (tab === k ? ' on' : '')} onClick={() => setTab(k)}>{l}</button>)}
+        {isAdmin && (
+          <select value={staff} onChange={(e) => setStaff(e.target.value)} style={{ marginLeft: 8 }}>
+            <option value="">Tất cả nhân viên</option>
+            {staffList.map((s) => <option key={s.email} value={s.email}>{s.name || s.email}</option>)}
+          </select>
+        )}
+      </div>
+      {tab === 'acc' ? <Receivables staffFilter={staff} /> : <>
+      {tab === 'pay' && <FilterBar range={range} setRange={setRange} />}
       <div className="stats">
         <Stat label="Tổng còn phải thu" value={fmtMoney(totals.balance) + ' đ'} tone="amber" />
         <Stat label="Quá hạn" value={fmtMoney(totals.overdue) + ' đ'} tone="red" />
@@ -139,6 +146,7 @@ export default function Debts() {
           )}
         </div>
       )}
+      </>}
       {edit && <PaymentForm initial={edit} onClose={() => setEdit(null)} profile={profile} fields={fields} />}
     </>
   );

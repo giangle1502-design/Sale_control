@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import DailyNotes from './pages/DailyNotes';
 import Activities from './pages/Activities';
 import Orders from './pages/Orders';
+import Quotes from './pages/Quotes';
 import Debts from './pages/Debts';
 import Tasks from './pages/Tasks';
 import Customers from './pages/Customers';
@@ -35,6 +36,7 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="nhat-ky" element={<DailyNotes />} />
         <Route path="hoat-dong" element={<Activities />} />
+        <Route path="bao-gia" element={<Quotes />} />
         <Route path="don-hang" element={<Orders />} />
         <Route path="cong-no" element={<Debts />} />
         <Route path="cong-viec" element={<Tasks />} />

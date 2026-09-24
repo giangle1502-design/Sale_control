@@ -36,7 +36,11 @@ export const fmtNum = (v, digits = 2) =>
   num(v).toLocaleString('vi-VN', { maximumFractionDigits: digits });
 export const fmtTon = (kg) => fmtNum(num(kg) / 1000, 3);
 
-export const ORDER_STATUSES = ['Báo giá', 'Đã chốt', 'Đang giao', 'Hoàn thành', 'Hủy'];
+export const ORDER_STATUSES = ['Đã chốt', 'Đang giao', 'Hoàn thành', 'Hủy'];
+export const QUOTE_STATUSES = ['Nháp', 'Đã gửi', 'KH chấp nhận', 'KH từ chối', 'Hết hạn', 'Đã tạo đơn'];
+export const QUOTE_OPEN = ['Nháp', 'Đã gửi', 'KH chấp nhận'];
+export const CUSTOMER_TYPES = ['Khách mới', 'Khách cũ'];
+export const CUSTOMER_TYPE_HINT = { 'Khách mới': 'Chưa bán – đang chào', 'Khách cũ': 'Đã bán' };
 // Trạng thái được tính vào doanh số và công nợ
 export const REVENUE_STATUSES = ['Đã chốt', 'Đang giao', 'Hoàn thành'];
 export const TASK_STATUSES = ['Mới', 'Đang làm', 'Hoàn thành', 'Hủy'];
@@ -68,4 +72,11 @@ export function slugKey(label) {
     '_' +
     Math.random().toString(36).slice(2, 6)
   );
+}
+
+// Chuẩn hóa chuỗi để so khớp: bỏ dấu, chữ thường, gọn khoảng trắng
+export function norm(s) {
+  return String(s ?? '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'd')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }

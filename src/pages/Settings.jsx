@@ -6,7 +6,7 @@ import { slugKey, today } from '../lib/utils';
 import { Field } from '../components/ui';
 
 const MODULES = [
-  ['activities', 'Hoạt động KH'], ['orders', 'Đơn hàng'], ['payments', 'Thu tiền'],
+  ['activities', 'Hoạt động KH'], ['quotes', 'Báo giá'], ['items', 'Cột dòng hàng (Lot, NSX…)'], ['orders', 'Đơn hàng'], ['payments', 'Thu tiền'],
   ['tasks', 'Công việc'], ['customers', 'Khách hàng'], ['dailyNotes', 'Báo cáo ngày'],
 ];
 const TYPES = [['text', 'Chữ'], ['textarea', 'Đoạn văn'], ['number', 'Số'], ['date', 'Ngày'], ['select', 'Danh sách chọn'], ['checkbox', 'Có/Không']];
@@ -161,6 +161,18 @@ export default function Settings() {
         <div className="form-grid">
           <Field label="Tên công ty (hiện trên menu và email)" full>
             <input value={c.companyName} onChange={(e) => setC({ ...c, companyName: e.target.value })} />
+          </Field>
+          <Field label="Địa chỉ công ty (in trên báo giá)" full>
+            <input value={c.companyAddress || ''} onChange={(e) => setC({ ...c, companyAddress: e.target.value })} />
+          </Field>
+          <Field label="Điện thoại">
+            <input value={c.companyPhone || ''} onChange={(e) => setC({ ...c, companyPhone: e.target.value })} />
+          </Field>
+          <Field label="Mã số thuế">
+            <input value={c.companyTaxCode || ''} onChange={(e) => setC({ ...c, companyTaxCode: e.target.value })} />
+          </Field>
+          <Field label="Điều khoản mặc định trên báo giá" full>
+            <textarea rows={2} value={c.quoteTerms || ''} onChange={(e) => setC({ ...c, quoteTerms: e.target.value })} />
           </Field>
           <Field label="Loại hoạt động khách hàng" full>
             <TagList items={c.activityTypes} onChange={(v) => setC({ ...c, activityTypes: v })} placeholder="VD: Thăm nhà máy" />

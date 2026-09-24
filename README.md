@@ -11,13 +11,15 @@ Web app giúp nhân viên sale ghi nhận công việc hằng ngày; quản lý 
 | **Tổng quan** | Số liệu của mình | Toàn bộ, lọc theo NV / khoảng ngày, biểu đồ, bảng xếp hạng NV, cảnh báo ai chưa báo cáo |
 | **Nhật ký ngày** | Viết: đã làm / khó khăn / kế hoạch mai (số liệu trong ngày tự tổng hợp sẵn) | Xem báo cáo của tất cả NV |
 | **Hoạt động KH** | Gọi điện, gặp khách, gửi mẫu, báo giá… + hẹn việc tiếp theo | Xem/sửa tất cả |
-| **Đơn hàng** | Báo giá / đơn chốt, nhiều dòng hàng (loại hạt, grade, kg, đ/kg), VAT, số ngày công nợ | Xem/sửa tất cả |
-| **Công nợ & Thu tiền** | Ghi phiếu thu; công nợ theo KH tự tính (tổng bán − đã thu, quá hạn) | Toàn công ty |
+| **Báo giá** | Tạo & in báo giá (Lưu PDF gửi khách), theo dõi trạng thái; khách đồng ý → **Xác nhận tạo đơn** | Xem tất cả, tỷ lệ chốt |
+| **Đơn hàng** | Đơn chốt (từ báo giá hoặc tạo trực tiếp), dòng hàng có cột phụ tùy chỉnh (Lot, Nhà sản xuất…), VAT, công nợ | Xem/sửa tất cả |
+| **Công nợ & Thu tiền** | Xem công nợ khách của mình (số liệu kế toán), ghi phiếu thu | **Nhập file Excel công nợ từ phần mềm kế toán** (tự dò cột, gán NV theo Mã KH) |
 | **Việc được giao** | Cập nhật trạng thái, % tiến độ, ghi chú tiến độ | Giao việc, hạn chót, ưu tiên, theo dõi quá hạn |
-| **Khách hàng** | Khách của mình (khách gõ mới ở các form được tự tạo) | Tất cả, chuyển KH giữa NV |
+| **Khách hàng** | Khách của mình, phân loại Khách cũ (đã bán) / Khách mới (đang chào) — tự chuyển thành Khách cũ khi chốt đơn | **Xuất Excel → điền Email NV phụ trách → Nhập lại** để phân bổ khách cho sale |
 | **Nhân viên** | – | Thêm email NV, phân quyền, khóa tài khoản |
 | **Cài đặt** | – | Danh sách email nhận báo cáo, **trường tự thêm** cho từng mục, danh mục loại hoạt động / loại hạt / nguồn KH |
 
+- **Thêm trường ngay trong form:** quản trị bấm "+ Thêm trường" / "+ Thêm cột" trong form Khách hàng, Báo giá, Đơn hàng.
 - **Trường tự thêm:** Cài đặt → "Trường thông tin tự thêm" → chọn mục (Hoạt động, Đơn hàng, Thu tiền, Công việc, Khách hàng, Báo cáo ngày) → thêm trường (chữ, số, ngày, danh sách chọn, có/không). Trường mới tự hiện trong form, bảng, Excel và email.
 - **Xuất Excel:** mỗi trang có nút ⬇ Excel; trang Tổng quan xuất báo cáo nhiều sheet (tổng hợp theo NV, theo ngày, theo loại hạt, theo KH và dữ liệu chi tiết).
 - **Email tối:** ~20:00 giờ VN gửi tới **danh sách email bạn tự nhập** trong Cài đặt. Có nút "Gửi thử" cho ngày bất kỳ.

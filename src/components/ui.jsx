@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
 import { addDays, monthStart, today } from '../lib/utils';
 
@@ -8,7 +9,7 @@ export function Modal({ title, onClose, children, wide }) {
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
-  return (
+  return createPortal(
     <div className="modal-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={'modal' + (wide ? ' wide' : '')}>
         <div className="modal-head">
@@ -17,7 +18,8 @@ export function Modal({ title, onClose, children, wide }) {
         </div>
         <div className="modal-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

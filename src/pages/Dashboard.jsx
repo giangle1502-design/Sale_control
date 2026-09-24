@@ -22,6 +22,7 @@ export default function Dashboard() {
 
   const acts = useQuery(() => scopedQuery('activities', scope), deps);
   const ords = useQuery(() => scopedQuery('orders', scope), deps);
+  const quos = useQuery(() => scopedQuery('quotes', scope), deps);
   const pays = useQuery(() => scopedQuery('payments', scope), deps);
   const notes = useQuery(() => scopedQuery('dailyNotes', scope), deps);
   const custs = useQuery(() => scopedQuery('customers', { ...scope, dateField: 'createdDate' }), deps);
@@ -29,16 +30,16 @@ export default function Dashboard() {
 
   const visibleStaff = isAdmin ? (staff ? staffList.filter((s) => s.email === staff) : staffList) : staffList.filter((s) => s.email === email);
   const rep = useMemo(() => buildReport({
-    activities: acts.data, orders: ords.data, payments: pays.data, tasks: tasks.data, notes: notes.data,
+    activities: acts.data, quotes: quos.data, orders: ords.data, payments: pays.data, tasks: tasks.data, notes: notes.data,
     customers: custs.data, staffList: visibleStaff, ...range,
-  }), [acts.data, ords.data, pays.data, tasks.data, notes.data, custs.data, visibleStaff.length, range.from, range.to]);
+  }), [acts.data, quos.data, ords.data, pays.data, tasks.data, notes.data, custs.data, visibleStaff.length, range.from, range.to]);
 
   const days = daysBetween(range.from, range.to);
   const chartDays = days.map((d) => rep.byDay.find((x) => x.date === d) || { date: d, amount: 0, activities: 0 })
     .map((x) => ({ ...x, label: fmtDate(x.date).slice(0, 5) }));
   const multiDay = days.length > 1;
   const t = rep.total;
-  const err = acts.error || ords.error || pays.error || notes.error || custs.error || tasks.error;
+  const err = acts.error || quos.error || ords.error || pays.error || notes.error || custs.error || tasks.error;
   const missingNotes = range.to >= today() && range.from <= today()
     ? rep.staff.filter((s) => s.role !== 'admin' && !notes.data.some((n) => n.ownerEmail === s.email && n.date === today()))
     : [];
@@ -50,7 +51,7 @@ export default function Dashboard() {
     exportSheets(`BaoCao_${range.from}_${range.to}`, {
       'Tổng hợp theo NV': rep.staff.map((s) => ({
         'Nhân viên': s.name, 'Hoạt động KH': s.activities, 'Chi tiết HĐ': Object.entries(s.byType).map(([k, v]) => `${k}: ${v}`).join(', '),
-        'KH mới': s.newCustomers, 'Báo giá': s.quotes, 'Đơn chốt': s.orders, 'Sản lượng (tấn)': +(s.kg / 1000).toFixed(3),
+        'KH mới': s.newCustomers, 'Báo giá': s.quotes, 'Giá trị báo giá': Math.round(s.quoteAmount), 'BG đã chốt': s.quotesWon, 'Đơn chốt': s.orders, 'Sản lượng (tấn)': +(s.kg / 1000).toFixed(3),
         'Doanh số': Math.round(s.amount), 'Đã thu': Math.round(s.collected), 'Việc hoàn thành': s.tasksDone,
         'Việc đang mở': s.tasksOpen, 'Việc quá hạn': s.tasksOverdue, 'Số ngày có báo cáo': s.notes,
       })),
@@ -74,7 +75,7 @@ export default function Dashboard() {
       <FilterBar range={range} setRange={setRange} staff={staff} setStaff={setStaff} />
       <ErrorBox error={err} />
       <div className="stats">
-        <Stat label="Doanh số (đơn đã chốt)" value={fmtMoney(t.amount || 0)} sub={`${t.orders || 0} đơn · ${t.quotes || 0} báo giá`} tone="green" />
+        <Stat label="Doanh số (đơn đã chốt)" value={fmtMoney(t.amount || 0)} sub={`${t.orders || 0} đơn · ${t.quotes || 0} báo giá (${fmtMoney(t.quoteAmount || 0)} đ)`} tone="green" />
         <Stat label="Sản lượng" value={fmtTon(t.kg || 0) + ' tấn'} tone="green" />
         <Stat label="Đã thu tiền" value={fmtMoney(t.collected || 0)} tone="amber" />
         <Stat label="Hoạt động KH" value={t.activities || 0} sub={`${t.newCustomers || 0} khách hàng mới`} />

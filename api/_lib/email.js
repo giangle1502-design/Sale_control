@@ -61,10 +61,21 @@ export function renderEmail({ rep, date, config, data, appUrl }) {
         </div>`).join('')
       : '<p style="color:#888;font-size:13px">Không có.</p>');
 
-    html += h('Đơn hàng / báo giá') + table(
+    const itemCols = cf.items || [];
+    const itemStr = (i) => {
+      const extra = itemCols.map((c) => (i.custom?.[c.key] ? `${c.label}: ${i.custom[c.key]}` : '')).filter(Boolean).join(', ');
+      return `${i.product} ${i.grade || ''}${extra ? ' (' + extra + ')' : ''} ${num(i.qtyKg).toLocaleString('vi-VN')}kg × ${fmtMoney(i.priceKg)}`;
+    };
+    html += h('Báo giá gửi trong ngày') + table(
+      `<tr><th ${th}>Số BG</th><th ${th}>NV</th><th ${th}>Khách hàng</th><th ${th}>Sản phẩm</th><th ${th}>Tấn</th><th ${th}>Giá trị</th><th ${th}>Trạng thái</th></tr>`,
+      (data.quotes || []).map((q) => `<tr><td ${td}>${esc(q.quoteNo)}</td><td ${td}>${name(q.ownerEmail)}</td><td ${td}>${esc(q.customerName)}</td>
+        <td ${td}>${esc((q.items || []).map(itemStr).join('; '))}</td><td ${tdr}>${fmtTon(orderKg(q))}</td><td ${tdr}>${fmtMoney(orderAmount(q))}</td><td ${td}>${esc(q.status)}</td></tr>`)
+    );
+
+    html += h('Đơn hàng') + table(
       `<tr><th ${th}>Số ĐH</th><th ${th}>NV</th><th ${th}>Khách hàng</th><th ${th}>Sản phẩm</th><th ${th}>Tấn</th><th ${th}>Tổng tiền</th><th ${th}>Trạng thái</th>${customHead(cf.orders)}</tr>`,
       data.orders.map((o) => `<tr><td ${td}>${esc(o.orderNo)}</td><td ${td}>${name(o.ownerEmail)}</td><td ${td}>${esc(o.customerName)}</td>
-        <td ${td}>${esc((o.items || []).map((i) => `${i.product} ${i.grade || ''} ${num(i.qtyKg).toLocaleString('vi-VN')}kg × ${fmtMoney(i.priceKg)}`).join('; '))}</td>
+        <td ${td}>${esc((o.items || []).map(itemStr).join('; '))}</td>
         <td ${tdr}>${fmtTon(orderKg(o))}</td><td ${tdr}>${fmtMoney(orderAmount(o))}</td>
         <td ${td}>${REVENUE_STATUSES.includes(o.status) ? `<b style="color:#2e7d32">${esc(o.status)}</b>` : esc(o.status)}</td>${custom(cf.orders, o)}</tr>`)
     );

@@ -1,7 +1,7 @@
 // Tổng hợp báo cáo — dùng chung cho Dashboard (trình duyệt) và API gửi email (server)
 import { isTaskOverdue, num, orderAmount, orderKg, REVENUE_STATUSES, today } from './utils.js';
 
-export function buildReport({ activities = [], orders = [], payments = [], tasks = [], notes = [], customers = [], staffList = [], from, to }) {
+export function buildReport({ activities = [], quotes = [], orders = [], payments = [], tasks = [], notes = [], customers = [], staffList = [], from, to }) {
   const inRange = (d) => d && d >= from && d <= to;
   const ref = today();
   const rows = new Map();
@@ -11,7 +11,7 @@ export function buildReport({ activities = [], orders = [], payments = [], tasks
       const s = staffList.find((x) => x.email === email);
       rows.set(email, {
         email, name: s?.name || name || email, role: s?.role || 'sale',
-        activities: 0, byType: {}, newCustomers: 0, quotes: 0, orders: 0, kg: 0, amount: 0,
+        activities: 0, byType: {}, newCustomers: 0, quotes: 0, quoteAmount: 0, quotesWon: 0, orders: 0, kg: 0, amount: 0,
         collected: 0, tasksDone: 0, tasksOpen: 0, tasksOverdue: 0, notes: 0,
       });
     }
@@ -25,6 +25,12 @@ export function buildReport({ activities = [], orders = [], payments = [], tasks
     r.byType[a.type || 'Khác'] = (r.byType[a.type || 'Khác'] || 0) + 1;
   });
   customers.filter((c) => inRange(c.createdDate)).forEach((c) => { row(c.ownerEmail, c.ownerName).newCustomers++; });
+  quotes.filter((q) => inRange(q.date)).forEach((q) => {
+    const r = row(q.ownerEmail, q.ownerName);
+    r.quotes++;
+    r.quoteAmount += orderAmount(q);
+    if (q.status === 'Đã tạo đơn') r.quotesWon++;
+  });
   orders.filter((o) => inRange(o.date)).forEach((o) => {
     const r = row(o.ownerEmail, o.ownerName);
     if (o.status === 'Báo giá') r.quotes++;
@@ -45,7 +51,7 @@ export function buildReport({ activities = [], orders = [], payments = [], tasks
 
   const list = [...rows.values()].sort((a, b) => b.amount - a.amount || b.activities - a.activities);
   const total = list.reduce((t, r) => {
-    ['activities', 'newCustomers', 'quotes', 'orders', 'kg', 'amount', 'collected', 'tasksDone', 'tasksOpen', 'tasksOverdue', 'notes']
+    ['activities', 'newCustomers', 'quotes', 'quoteAmount', 'quotesWon', 'orders', 'kg', 'amount', 'collected', 'tasksDone', 'tasksOpen', 'tasksOverdue', 'notes']
       .forEach((k) => { t[k] = (t[k] || 0) + r[k]; });
     return t;
   }, {});

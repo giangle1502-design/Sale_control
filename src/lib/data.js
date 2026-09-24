@@ -34,8 +34,14 @@ export async function saveDoc(coll, id, data, profile) {
 // Nếu khách hàng gõ mới chưa có trong danh sách thì tự tạo
 export async function ensureCustomer(sel, profile) {
   if (sel.customerId || !sel.customerName?.trim()) return { customerId: sel.customerId || '', customerName: sel.customerName || '' };
-  const id = await saveDoc('customers', null, { name: sel.customerName.trim(), createdDate: today() }, profile);
+  const id = await saveDoc('customers', null, { name: sel.customerName.trim(), customerType: 'Khách mới', stage: 'Tiềm năng', createdDate: today() }, profile);
   return { customerId: id, customerName: sel.customerName.trim() };
+}
+
+// Khi đã chốt đơn → chuyển khách thành "Khách cũ"
+export async function markCustomerOld(customerId) {
+  if (!customerId) return;
+  try { await updateDoc(doc(db, 'customers', customerId), { customerType: 'Khách cũ' }); } catch (e) { console.warn(e.message); }
 }
 
 export const removeDoc = (coll, id) => deleteDoc(doc(db, coll, id));
