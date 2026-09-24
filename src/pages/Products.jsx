@@ -82,9 +82,7 @@ export default function Products() {
               {rows.map((p) => (
                 <tr key={p.id}>
                   <td>{p.category}</td><td className="nowrap"><b>{p.code}</b></td><td>{p.name}</td><td>{p.unit}</td>
-                  <td className="num">{fmtMoney(p.price)}
-                    {p.prevPrice !== undefined && p.prevPrice !== p.price && <div className="small">trước: {fmtMoney(p.prevPrice)}</div>}
-                  </td>
+                  <td className="num">{fmtMoney(p.price)}</td>
                   <td className="nowrap">{fmtDate(p.priceDate)}</td>
                   {fields.map((f) => <td key={f.key}>{String(customValue(f, p.custom?.[f.key]))}</td>)}
                   {isAdmin && (
@@ -120,7 +118,7 @@ function ProductForm({ initial, onClose }) {
       const newId = id || productDocId(rest.code);
       await setDoc(doc(db, 'products', newId), {
         ...rest, code: rest.code.trim(), price,
-        ...(priceChanged ? { priceDate: today(), prevPrice: id ? num(initial.price) : price } : {}),
+        ...(priceChanged ? { priceDate: today() } : {}),
         updatedAt: serverTimestamp(), updatedBy: email,
       }, { merge: true });
       onClose();
@@ -195,9 +193,9 @@ function ImportProducts({ existing, onClose }) {
         }
         if (hasPrice) {
           data.price = price;
-          if (!found || num(found.price) !== price) { data.priceDate = today(); data.prevPrice = found ? num(found.price) : price; }
+          data.priceDate = today();
         }
-        items.push({ line: hr + i + 2, code, name: data.name || found?.name || '', old: found?.price, price: hasPrice ? price : undefined, action, problem, data });
+        items.push({ line: hr + i + 2, code, name: data.name || found?.name || '', price: hasPrice ? price : undefined, action, problem, data });
       });
       setPlan({ items, priceOnly, headerRow: hr + 1 });
     } catch (e) { setErr(e.message); }
@@ -212,8 +210,7 @@ function ImportProducts({ existing, onClose }) {
         todo.slice(i, i + 400).forEach((x) => b.set(doc(db, 'products', productDocId(x.code)), { ...x.data, updatedAt: serverTimestamp(), updatedBy: email }, { merge: true }));
         await b.commit();
       }
-      const changed = todo.filter((x) => x.price !== undefined && x.old !== x.price).length;
-      setDone(`Đã cập nhật ${todo.length} mặt hàng (${todo.filter((x) => x.action === 'create').length} mới, ${changed} thay đổi giá).`);
+      setDone(`Đã cập nhật ${todo.length} mặt hàng (${todo.filter((x) => x.action === 'create').length} mới, ${todo.filter((x) => x.price !== undefined).length} có giá bán).`);
       setPlan(null);
     } catch (e) { setErr(e.message); }
     setBusy(false);
@@ -242,13 +239,12 @@ function ImportProducts({ existing, onClose }) {
           </div>
           <div className="table-wrap" style={{ maxHeight: 320, overflow: 'auto' }}>
             <table>
-              <thead><tr><th>Dòng</th><th>Mã hàng</th><th>Tên hàng</th><th className="num">Giá cũ</th><th className="num">Giá mới</th><th>Thao tác</th></tr></thead>
+              <thead><tr><th>Dòng</th><th>Mã hàng</th><th>Tên hàng</th><th className="num">Giá bán</th><th>Thao tác</th></tr></thead>
               <tbody>
                 {plan.items.slice(0, 500).map((x) => (
                   <tr key={x.line}>
                     <td>{x.line}</td><td>{x.code}</td><td>{x.name}</td>
-                    <td className="num">{x.old !== undefined ? fmtMoney(x.old) : ''}</td>
-                    <td className="num">{x.price !== undefined ? <b style={{ color: x.old !== undefined && x.old !== x.price ? 'var(--primary)' : undefined }}>{fmtMoney(x.price)}</b> : ''}</td>
+                    <td className="num">{x.price !== undefined ? fmtMoney(x.price) : ''}</td>
                     <td>{x.action === 'skip' ? <span className="badge red">Bỏ qua: {x.problem}</span> : x.action === 'create' ? <span className="badge green">Tạo mới</span> : <span className="badge blue">Cập nhật</span>}</td>
                   </tr>
                 ))}
