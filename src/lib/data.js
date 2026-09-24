@@ -6,14 +6,22 @@ import { today } from './utils';
 import { reserveCodes } from './codes';
 
 // Tạo truy vấn theo quyền: sale chỉ thấy dữ liệu của mình; admin thấy tất cả hoặc lọc theo 1 NV.
+// Khi lọc theo nhân viên: chỉ truy vấn theo ownerEmail, lọc ngày ngay trên trình duyệt
+// → không cần tạo chỉ mục (index) ghép trên Firestore.
 export function scopedQuery(coll, { me, isAdmin, staffFilter, from, to, dateField = 'date', order = true }) {
-  const conds = [];
   const owner = isAdmin ? staffFilter : me;
-  if (owner) conds.push(where('ownerEmail', '==', owner));
-  if (from) conds.push(where(dateField, '>=', from));
-  if (to) conds.push(where(dateField, '<=', to));
-  if (order && (from || to)) conds.push(orderBy(dateField, 'desc'));
-  return query(collection(db, coll), ...conds);
+  let q;
+  if (owner) {
+    q = query(collection(db, coll), where('ownerEmail', '==', owner));
+  } else {
+    const conds = [];
+    if (from) conds.push(where(dateField, '>=', from));
+    if (to) conds.push(where(dateField, '<=', to));
+    if (order && (from || to)) conds.push(orderBy(dateField, 'desc'));
+    q = query(collection(db, coll), ...conds);
+  }
+  q.__clientFilter = owner && (from || to) ? { dateField, from, to } : null;
+  return q;
 }
 
 export async function saveDoc(coll, id, data, profile) {
