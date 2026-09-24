@@ -50,7 +50,7 @@ export default function Orders() {
     const lines = [];
     rows.forEach((r) => (r.items || []).forEach((it) => lines.push({
       'Số ĐH': r.orderNo, 'Từ báo giá': r.quoteNo || '', Ngày: fmtDate(r.date), 'Nhân viên': staffName(r.ownerEmail), 'Khách hàng': r.customerName,
-      'Sản phẩm': it.product, 'Mã/Grade': it.grade,
+      'Mã hàng': it.productCode || '', 'Tên hàng': it.product, 'Grade': it.grade,
       ...Object.fromEntries(cols.map((c) => [c.label, customValue(c, it.custom?.[c.key])])),
       'SL (kg)': num(it.qtyKg), 'Đơn giá (đ/kg)': num(it.priceKg),
       'Thành tiền': num(it.qtyKg) * num(it.priceKg), 'VAT %': num(r.vatPct), 'Trạng thái': r.status,

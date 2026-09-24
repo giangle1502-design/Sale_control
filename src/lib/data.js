@@ -3,6 +3,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { today } from './utils';
+import { reserveCodes } from './codes';
 
 // Tạo truy vấn theo quyền: sale chỉ thấy dữ liệu của mình; admin thấy tất cả hoặc lọc theo 1 NV.
 export function scopedQuery(coll, { me, isAdmin, staffFilter, from, to, dateField = 'date', order = true }) {
@@ -34,7 +35,8 @@ export async function saveDoc(coll, id, data, profile) {
 // Nếu khách hàng gõ mới chưa có trong danh sách thì tự tạo
 export async function ensureCustomer(sel, profile) {
   if (sel.customerId || !sel.customerName?.trim()) return { customerId: sel.customerId || '', customerName: sel.customerName || '' };
-  const id = await saveDoc('customers', null, { name: sel.customerName.trim(), customerType: 'Khách mới', stage: 'Tiềm năng', createdDate: today() }, profile);
+  const [code] = await reserveCodes(1);
+  const id = await saveDoc('customers', null, { code, name: sel.customerName.trim(), customerType: 'Khách mới', stage: 'Tiềm năng', createdDate: today() }, profile);
   return { customerId: id, customerName: sel.customerName.trim() };
 }
 

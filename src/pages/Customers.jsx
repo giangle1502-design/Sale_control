@@ -8,6 +8,7 @@ import { exportSheets } from '../lib/excel';
 import { cellText, detectHeaderRow, guessMapping, readWorkbook, sheetRows, toNumber } from '../lib/excelImport';
 import { useCustomers } from '../components/CustomerPicker';
 import AddFieldButton from '../components/AddFieldButton';
+import { isAutoCode, reserveCodes } from '../lib/codes';
 import { confirmDelete, CustomFieldInputs, customValue, Empty, ErrorBox, Field, Modal, Stat } from '../components/ui';
 
 const STAGES = ['Tiềm năng', 'Đang chăm sóc', 'Đang giao dịch', 'Ngừng giao dịch'];
@@ -64,6 +65,7 @@ export default function Customers() {
     all: data.length,
     old: data.filter((c) => c.customerType === 'Khách cũ').length,
     fresh: data.filter((c) => (c.customerType || 'Khách mới') === 'Khách mới').length,
+    needCode: data.filter((c) => c.customerType === 'Khách cũ' && (!c.code || isAutoCode(c.code))).length,
   }), [data]);
 
   const doExport = () => exportSheets(`KhachHang_${today()}`, {
@@ -81,7 +83,7 @@ export default function Customers() {
   const doTemplate = () => exportSheets('Mau_nhap_khach_hang', {
     'Khách hàng': [{
       'ID hệ thống': '', 'Email NV phụ trách': staffList.find((x) => x.role !== 'admin')?.email || 'sale@congty.com', 'Tên NV phụ trách': '',
-      'Mã KH': 'KH001', 'Tên KH': 'Công ty TNHH Nhựa ABC', 'Loại KH (Khách cũ/Khách mới)': 'Khách mới', 'Người liên hệ': 'Anh Nam',
+      'Mã KH': '', 'Tên KH': 'Công ty TNHH Nhựa ABC', 'Loại KH (Khách cũ/Khách mới)': 'Khách mới', 'Người liên hệ': 'Anh Nam',
       SĐT: '0909xxxxxx', 'Email KH': '', 'Địa chỉ': 'KCN ...', MST: '', Nguồn: '', 'Giai đoạn': 'Tiềm năng',
       'Loại hạt đang dùng': 'PP, HDPE', 'Sản lượng/tháng (tấn)': 20, 'Ghi chú': '',
       ...Object.fromEntries(fields.map((f) => [f.label, ''])),
@@ -110,6 +112,7 @@ export default function Customers() {
         <Stat label="Tổng khách hàng" value={cnt.all} />
         <Stat label="Khách cũ (đã bán)" value={cnt.old} tone="green" />
         <Stat label="Khách mới (đang chào)" value={cnt.fresh} tone="amber" />
+        {cnt.needCode > 0 && <Stat label="Khách cũ còn mã tạm" value={cnt.needCode} sub="Cập nhật mã kế toán (nhập Excel hoặc Sửa)" tone="red" />}
       </div>
       <div className="filters">
         <input placeholder="Tìm tên, mã KH, SĐT, MST…" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -135,7 +138,9 @@ export default function Customers() {
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id}>
-                  <td className="nowrap">{c.code}</td>
+                  <td className="nowrap">{c.code}
+                    {c.customerType === 'Khách cũ' && (!c.code || isAutoCode(c.code)) && <div><span className="badge red" title="Khách đã chốt: cập nhật mã theo phần mềm kế toán">Cần mã kế toán</span></div>}
+                  </td>
                   <td><b>{c.name}</b>{c.address && <div className="small">{c.address}</div>}</td>
                   <td><span className={'badge ' + TYPE_TONE[c.customerType || 'Khách mới']} title={CUSTOMER_TYPE_HINT[c.customerType || 'Khách mới']}>{c.customerType || 'Khách mới'}</span></td>
                   <td>{c.contact}<div className="small">{c.phone} {c.email}</div></td>
@@ -175,7 +180,7 @@ function CustomerForm({ initial, onClose }) {
       const { id, createdAt, createdBy, updatedAt, updatedBy, ...rest } = f;
       if (!isAdmin) { delete rest.ownerEmail; delete rest.ownerName; }
       else if (rest.ownerEmail) rest.ownerName = staffName(rest.ownerEmail);
-      if (isAdmin && !id && rest.ownerEmail === undefined) delete rest.ownerEmail;
+      if (!rest.code?.trim()) [rest.code] = await reserveCodes(1);
       await saveDoc('customers', id, rest, profile);
       onClose();
     } catch (e2) { setErr(e2.message); setBusy(false); }
@@ -185,7 +190,10 @@ function CustomerForm({ initial, onClose }) {
       <form onSubmit={submit}>
         <div className="form-grid">
           <Field label="Tên khách hàng / công ty" required full><input value={f.name} onChange={set('name')} required /></Field>
-          <Field label="Mã KH (theo phần mềm kế toán)"><input value={f.code} onChange={set('code')} /></Field>
+          <Field label="Mã KH">
+            <input value={f.code} onChange={set('code')} placeholder="Để trống → tự tạo mã (VD: KH000001)" />
+            <small className="small">Khách mới đang chào: để trống, hệ thống tự cấp mã. Khách đã chốt: nhập mã theo phần mềm kế toán.</small>
+          </Field>
           <Field label="Loại khách hàng">
             <select value={f.customerType} onChange={set('customerType')}>
               {CUSTOMER_TYPES.map((x) => <option key={x} value={x}>{x} – {CUSTOMER_TYPE_HINT[x]}</option>)}
@@ -298,6 +306,10 @@ function ImportCustomers({ existing, onClose }) {
     setBusy(true); setErr('');
     try {
       const todo = plan.items.filter((x) => !x.skip);
+      const needCode = todo.filter((x) => !x.found && !x.data.code);
+      const codes = await reserveCodes(needCode.length);
+      needCode.forEach((x, i) => { x.data.code = codes[i]; });
+      todo.filter((x) => x.found && !x.found.code && !x.data.code).forEach((x) => { delete x.data.code; });
       const nameOf = (e) => staffList.find((x) => x.email === e)?.name || (e === email ? profile.name : e);
       for (let i = 0; i < todo.length; i += 400) {
         const batch = writeBatch(db);
@@ -322,7 +334,7 @@ function ImportCustomers({ existing, onClose }) {
   return (
     <Modal title="Nhập khách hàng từ Excel" onClose={onClose} wide>
       <p className="small">
-        Dùng file xuất từ nút "Xuất Excel" hoặc "File mẫu". Cột bắt buộc: <b>Tên KH</b>.
+        Dùng file xuất từ nút "Xuất Excel" hoặc "File mẫu". Cột bắt buộc: <b>Tên KH</b>. Để trống <b>Mã KH</b> thì hệ thống tự cấp mã KH000001…; khách đã chốt ghi mã theo phần mềm kế toán.
         {isAdmin ? ' Cột "Email NV phụ trách" (hoặc "Tên NV phụ trách") dùng để phân bổ khách cho sale.' : ' Khách nhập vào sẽ thuộc về bạn.'}
       </p>
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={(e) => e.target.files[0] && parse(e.target.files[0])} />

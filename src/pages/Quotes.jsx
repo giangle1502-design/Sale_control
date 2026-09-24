@@ -200,10 +200,10 @@ export function printQuote(q, config, staffName) {
   const sub = (q.items || []).reduce((s, it) => s + num(it.qtyKg) * num(it.priceKg), 0);
   const vat = sub * num(q.vatPct) / 100;
   const rows = (q.items || []).map((it, i) => `<tr>
-      <td class="c">${i + 1}</td><td>${esc(it.product)}</td><td>${esc(it.grade)}</td>
+      <td class="c">${i + 1}</td><td>${esc(it.productCode)}</td><td>${esc(it.product)}</td><td>${esc(it.grade)}</td>
       ${cols.map((c) => `<td>${esc(c.type === 'checkbox' ? (it.custom?.[c.key] ? '✓' : '') : it.custom?.[c.key] ?? '')}</td>`).join('')}
       <td class="r">${fmtNum(it.qtyKg, 0)}</td><td class="r">${fmtMoney(it.priceKg)}</td><td class="r">${fmtMoney(num(it.qtyKg) * num(it.priceKg))}</td></tr>`).join('');
-  const span = 3 + cols.length + 2;
+  const span = 4 + cols.length + 2;
   const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(q.quoteNo)}</title>
   <style>
     body{font-family:Arial,sans-serif;color:#111;margin:32px;font-size:13px}
@@ -222,7 +222,7 @@ export function printQuote(q, config, staffName) {
     ${q.attention ? `<tr><td>Người nhận:</td><td>${esc(q.attention)}</td></tr>` : ''}
     <tr><td>Nhân viên phụ trách:</td><td>${esc(staffName(q.ownerEmail))}</td></tr></table>
   <p>Chúng tôi xin trân trọng gửi đến Quý khách bảng báo giá như sau:</p>
-  <table><thead><tr><th>STT</th><th>Loại hạt</th><th>Mã / Grade</th>${cols.map((c) => `<th>${esc(c.label)}</th>`).join('')}
+  <table><thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>Grade</th>${cols.map((c) => `<th>${esc(c.label)}</th>`).join('')}
     <th>SL (kg)</th><th>Đơn giá (đ/kg)</th><th>Thành tiền (đ)</th></tr></thead>
   <tbody>${rows}
     <tr><td colspan="${span}" class="r">Cộng tiền hàng</td><td class="r">${fmtMoney(sub)}</td></tr>

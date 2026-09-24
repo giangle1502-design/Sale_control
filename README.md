@@ -16,9 +16,11 @@ Web app giúp nhân viên sale ghi nhận công việc hằng ngày; quản lý 
 | **Công nợ & Thu tiền** | Xem công nợ khách của mình (số liệu kế toán), ghi phiếu thu | **Nhập file Excel công nợ từ phần mềm kế toán** (tự dò cột, gán NV theo Mã KH) |
 | **Việc được giao** | Cập nhật trạng thái, % tiến độ, ghi chú tiến độ | Giao việc, hạn chót, ưu tiên, theo dõi quá hạn |
 | **Khách hàng** | Khách của mình, phân loại Khách cũ (đã bán) / Khách mới (đang chào) — tự chuyển thành Khách cũ khi chốt đơn | **Xuất Excel → điền Email NV phụ trách → Nhập lại** để phân bổ khách cho sale |
+| **Mặt hàng** | Xem danh mục (Tính chất, Mã, Tên, Giá bán); chọn mã hàng trong báo giá/đơn tự điền tên & giá | Nhập danh mục từ Excel, **cập nhật giá theo mẫu Ecount** (No., Mã mặt hàng, Giá bán) |
 | **Nhân viên** | – | Thêm email NV, phân quyền, khóa tài khoản |
 | **Cài đặt** | – | Danh sách email nhận báo cáo, **trường tự thêm** cho từng mục, danh mục loại hoạt động / loại hạt / nguồn KH |
 
+- **Mã KH tự động:** khách mới đang chào (để trống Mã KH) được cấp mã KH000001, KH000002…; khách đã chốt nhập mã theo phần mềm kế toán. Tiền tố/số bắt đầu chỉnh ở Cài đặt.
 - **Thêm trường ngay trong form:** quản trị bấm "+ Thêm trường" / "+ Thêm cột" trong form Khách hàng, Báo giá, Đơn hàng.
 - **Trường tự thêm:** Cài đặt → "Trường thông tin tự thêm" → chọn mục (Hoạt động, Đơn hàng, Thu tiền, Công việc, Khách hàng, Báo cáo ngày) → thêm trường (chữ, số, ngày, danh sách chọn, có/không). Trường mới tự hiện trong form, bảng, Excel và email.
 - **Xuất Excel:** mỗi trang có nút ⬇ Excel; trang Tổng quan xuất báo cáo nhiều sheet (tổng hợp theo NV, theo ngày, theo loại hạt, theo KH và dữ liệu chi tiết).

@@ -64,7 +64,7 @@ export function renderEmail({ rep, date, config, data, appUrl }) {
     const itemCols = cf.items || [];
     const itemStr = (i) => {
       const extra = itemCols.map((c) => (i.custom?.[c.key] ? `${c.label}: ${i.custom[c.key]}` : '')).filter(Boolean).join(', ');
-      return `${i.product} ${i.grade || ''}${extra ? ' (' + extra + ')' : ''} ${num(i.qtyKg).toLocaleString('vi-VN')}kg × ${fmtMoney(i.priceKg)}`;
+      return `${i.productCode ? '[' + i.productCode + '] ' : ''}${i.product} ${i.grade || ''}${extra ? ' (' + extra + ')' : ''} ${num(i.qtyKg).toLocaleString('vi-VN')}kg × ${fmtMoney(i.priceKg)}`;
     };
     html += h('Báo giá gửi trong ngày') + table(
       `<tr><th ${th}>Số BG</th><th ${th}>NV</th><th ${th}>Khách hàng</th><th ${th}>Sản phẩm</th><th ${th}>Tấn</th><th ${th}>Giá trị</th><th ${th}>Trạng thái</th></tr>`,

@@ -66,6 +66,19 @@ service cloud.firestore {
       allow delete: if isStaff() && (isAdmin() || resource.data.createdBy == me());
     }
 
+    // Bộ đếm mã KH tự động: chỉ được tăng
+    match /counters/{id} {
+      allow read: if isStaff();
+      allow create: if isStaff() && (isAdmin() || request.resource.data.n > 0);
+      allow update: if isStaff() && (isAdmin() || request.resource.data.n > resource.data.n);
+    }
+
+    // Danh mục mặt hàng: mọi nhân viên xem, quản trị sửa
+    match /products/{id} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+
     // Công nợ nhập từ phần mềm kế toán: sale xem khách của mình, chỉ quản trị nhập
     match /receivables/{id} {
       allow read: if isStaff() && (isAdmin() || ownsExisting());

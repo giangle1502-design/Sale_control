@@ -2,16 +2,19 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { auth, db, SUPER_ADMINS } from '../firebase';
+import { setCodeConfig } from '../lib/codes';
 
 export const DEFAULT_CONFIG = {
   companyName: 'Công ty Hạt nhựa',
   activityTypes: ['Gọi điện', 'Gặp khách', 'Gửi mẫu', 'Báo giá', 'Zalo/Email', 'Khác'],
   products: ['PP', 'PE', 'HDPE', 'LDPE', 'LLDPE', 'ABS', 'PS', 'PET', 'PVC', 'PC', 'Hạt màu', 'Hạt tái sinh'],
   customerSources: ['Khách cũ', 'Giới thiệu', 'Online', 'Hội chợ', 'Tự tìm'],
-  customFields: { activities: [], quotes: [], orders: [], items: [], payments: [], tasks: [], customers: [], dailyNotes: [] },
+  customFields: { activities: [], quotes: [], orders: [], items: [], products: [], payments: [], tasks: [], customers: [], dailyNotes: [] },
   companyAddress: '',
   companyPhone: '',
   companyTaxCode: '',
+  codePrefix: 'KH',
+  codeDigits: 6,
   quoteTerms: 'Giá chưa bao gồm VAT. Báo giá có hiệu lực 7 ngày. Giao hàng tại kho bên mua.',
   reportRecipients: [],
   reportEnabled: true,
@@ -48,6 +51,7 @@ export function AppProvider({ children }) {
     if (!allowed) return;
     return onSnapshot(doc(db, 'settings', 'config'), (s) => {
       const d = s.exists() ? s.data() : {};
+      setCodeConfig({ codePrefix: d.codePrefix ?? 'KH', codeDigits: d.codeDigits || 6 });
       setConfig({
         ...DEFAULT_CONFIG,
         ...d,

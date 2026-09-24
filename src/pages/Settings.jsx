@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { DEFAULT_CONFIG, useApp } from '../context/AppContext';
 import { slugKey, today } from '../lib/utils';
 import { Field } from '../components/ui';
+import { formatCode } from '../lib/codes';
 
 const MODULES = [
   ['activities', 'Hoạt động KH'], ['quotes', 'Báo giá'], ['items', 'Cột dòng hàng (Lot, NSX…)'], ['orders', 'Đơn hàng'], ['payments', 'Thu tiền'],
@@ -157,6 +158,20 @@ export default function Settings() {
       </div>
 
       <div className="card">
+        <h2>🔢 Mã khách hàng tự động</h2>
+        <p className="small">Khách mới đang chào giá (để trống Mã KH) được cấp mã tự động. Khách đã chốt: nhập mã theo phần mềm kế toán.</p>
+        <div className="form-grid">
+          <Field label="Tiền tố">
+            <input value={c.codePrefix ?? 'KH'} onChange={(e) => setC({ ...c, codePrefix: e.target.value.trim() })} />
+          </Field>
+          <Field label="Số chữ số">
+            <input type="number" min="3" max="10" value={c.codeDigits || 6} onChange={(e) => setC({ ...c, codeDigits: Number(e.target.value) || 6 })} />
+          </Field>
+        </div>
+        <CodeCounter prefixCfg={c} />
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
         <h2>📋 Danh mục</h2>
         <div className="form-grid">
           <Field label="Tên công ty (hiện trên menu và email)" full>
@@ -189,5 +204,30 @@ export default function Settings() {
         </button>
       </div>
     </>
+  );
+}
+
+function CodeCounter({ prefixCfg }) {
+  const [n, setN] = useState(null);
+  const [next, setNext] = useState('');
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    getDoc(doc(db, 'counters', 'customerCode')).then((s) => {
+      const v = s.exists() ? Number(s.data().n) || 0 : 0;
+      setN(v); setNext(String(v + 1));
+    }).catch(() => setN(0));
+  }, []);
+  const save = async () => {
+    const v = Math.max(1, Number(next) || 1) - 1;
+    await setDoc(doc(db, 'counters', 'customerCode'), { n: v });
+    setN(v); setMsg('✔ Đã đặt số tiếp theo');
+  };
+  return (
+    <div className="inline-add" style={{ alignItems: 'center', maxWidth: 560 }}>
+      <span className="small">Mã tiếp theo: <b>{n === null ? '…' : formatCode((n || 0) + 1, prefixCfg)}</b> · Đặt số bắt đầu:</span>
+      <input type="number" min="1" value={next} onChange={(e) => setNext(e.target.value)} style={{ maxWidth: 120 }} />
+      <button type="button" className="btn sm" onClick={save}>Đặt</button>
+      {msg && <span className="small">{msg}</span>}
+    </div>
   );
 }

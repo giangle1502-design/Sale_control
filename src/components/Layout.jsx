@@ -11,6 +11,7 @@ const NAV = [
   ['/cong-no', '💰', 'Công nợ & Thu tiền'],
   ['/cong-viec', '✅', 'Việc được giao'],
   ['/khach-hang', '👥', 'Khách hàng'],
+  ['/mat-hang', '🏷️', 'Mặt hàng'],
 ];
 const ADMIN_NAV = [
   ['/nhan-vien', '🧑‍💼', 'Nhân viên'],

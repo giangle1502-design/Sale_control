@@ -12,6 +12,7 @@ import Quotes from './pages/Quotes';
 import Debts from './pages/Debts';
 import Tasks from './pages/Tasks';
 import Customers from './pages/Customers';
+import Products from './pages/Products';
 import Staff from './pages/Staff';
 import Settings from './pages/Settings';
 
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="cong-no" element={<Debts />} />
         <Route path="cong-viec" element={<Tasks />} />
         <Route path="khach-hang" element={<Customers />} />
+        <Route path="mat-hang" element={<Products />} />
         {isAdmin && <Route path="nhan-vien" element={<Staff />} />}
         {isAdmin && <Route path="cai-dat" element={<Settings />} />}
         <Route path="*" element={<Navigate to="/" />} />
