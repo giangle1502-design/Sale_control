@@ -6,6 +6,7 @@ import { fmtDate, fmtMoney, num, orderAmount, REVENUE_STATUSES, today } from '..
 import { exportSheets } from '../lib/excel';
 import CustomerPicker from '../components/CustomerPicker';
 import Receivables from './Receivables';
+import PaymentForm from '../components/PaymentForm';
 import {
   confirmDelete, CustomFieldInputs, customValue, Empty, ErrorBox, Field, FilterBar, Modal, Stat, useRange,
 } from '../components/ui';
@@ -19,7 +20,7 @@ export function computeDebts(orders, payments, ref = today()) {
   const map = new Map();
   const get = (r) => {
     const k = custKey(r);
-    if (!map.has(k)) map.set(k, { key: k, customerName: r.customerName, ownerEmail: r.ownerEmail, sales: 0, paid: 0, dueSales: 0, lastDue: '' });
+    if (!map.has(k)) map.set(k, { key: k, customerId: r.customerId || '', customerName: r.customerName, ownerEmail: r.ownerEmail, sales: 0, paid: 0, dueSales: 0, lastDue: '' });
     return map.get(k);
   };
   orders.filter((o) => REVENUE_STATUSES.includes(o.status)).forEach((o) => {
@@ -42,6 +43,7 @@ export default function Debts() {
   const [staff, setStaff] = useState('');
   const [tab, setTab] = useState('acc');
   const [edit, setEdit] = useState(null);
+  const [outstanding, setOutstanding] = useState(0);
   const fields = config.customFields.payments || [];
   const scope = { me: email, isAdmin, staffFilter: staff };
 
@@ -89,7 +91,7 @@ export default function Debts() {
           </select>
         )}
       </div>
-      {tab === 'acc' ? <Receivables staffFilter={staff} /> : <>
+      {tab === 'acc' ? <Receivables staffFilter={staff} onCollect={(c, amt) => { setOutstanding(amt); setEdit({ ...blank(), ...c }); }} /> : <>
       {tab === 'pay' && <FilterBar range={range} setRange={setRange} />}
       <div className="stats">
         <Stat label="Tổng còn phải thu" value={fmtMoney(totals.balance) + ' đ'} tone="amber" />
@@ -101,7 +103,7 @@ export default function Debts() {
         <div className="table-wrap">
           {debts.length === 0 ? <Empty /> : (
             <table>
-              <thead><tr><th>Khách hàng</th>{isAdmin && <th>Nhân viên</th>}<th className="num">Tổng bán</th><th className="num">Đã thu</th><th className="num">Còn nợ</th><th className="num">Quá hạn</th><th>Hạn gần nhất</th></tr></thead>
+              <thead><tr><th>Khách hàng</th>{isAdmin && <th>Nhân viên</th>}<th className="num">Tổng bán</th><th className="num">Đã thu</th><th className="num">Còn nợ</th><th className="num">Quá hạn</th><th>Hạn gần nhất</th><th></th></tr></thead>
               <tbody>
                 {debts.map((d) => (
                   <tr key={d.key}>
@@ -112,6 +114,11 @@ export default function Debts() {
                     <td className="num"><b>{fmtMoney(d.balance)}</b></td>
                     <td className="num">{d.overdue > 0 ? <span className="badge red">{fmtMoney(d.overdue)}</span> : '-'}</td>
                     <td>{fmtDate(d.lastDue)}</td>
+                    <td className="nowrap">
+                      {d.balance > 0 && (isAdmin || d.ownerEmail === email) && (
+                        <button className="btn sm primary" onClick={() => { setOutstanding(d.balance); setEdit({ ...blank(), customerId: d.customerId, customerName: d.customerName }); }}>💰 Ghi thu tiền</button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -147,44 +154,7 @@ export default function Debts() {
         </div>
       )}
       </>}
-      {edit && <PaymentForm initial={edit} onClose={() => setEdit(null)} profile={profile} fields={fields} />}
+      {edit && <PaymentForm initial={edit} outstanding={outstanding} onClose={() => { setEdit(null); setOutstanding(0); }} />}
     </>
-  );
-}
-
-function PaymentForm({ initial, onClose, profile, fields }) {
-  const [f, setF] = useState({ ...blank(), ...initial, custom: initial.custom || {} });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true); setErr('');
-    try {
-      const cust = await ensureCustomer(f, profile);
-      const { id, ownerEmail, ownerName, createdAt, createdBy, updatedAt, updatedBy, ...rest } = f;
-      await saveDoc('payments', id, { ...rest, ...cust, amount: num(rest.amount) }, profile);
-      onClose();
-    } catch (e2) { setErr(e2.message); setBusy(false); }
-  };
-  return (
-    <Modal title={f.id ? 'Sửa phiếu thu' : 'Ghi nhận thu tiền'} onClose={onClose}>
-      <form onSubmit={submit}>
-        <div className="form-grid">
-          <Field label="Ngày thu" required><input type="date" value={f.date} onChange={set('date')} required /></Field>
-          <Field label="Số tiền (đ)" required><input type="number" step="any" value={f.amount} onChange={set('amount')} required /></Field>
-          <Field label="Khách hàng" required full><CustomerPicker value={f} onChange={(c) => setF({ ...f, ...c })} required /></Field>
-          <Field label="Hình thức"><select value={f.method} onChange={set('method')}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select></Field>
-          <Field label="Số đơn hàng (nếu có)"><input value={f.orderNo} onChange={set('orderNo')} /></Field>
-          <Field label="Ghi chú" full><input value={f.note} onChange={set('note')} /></Field>
-          <CustomFieldInputs fields={fields} value={f.custom} onChange={(custom) => setF({ ...f, custom })} />
-        </div>
-        {err && <div className="error-box">{err}</div>}
-        <div className="form-actions">
-          <button type="button" className="btn" onClick={onClose}>Hủy</button>
-          <button className="btn primary" disabled={busy}>Lưu</button>
-        </div>
-      </form>
-    </Modal>
   );
 }
