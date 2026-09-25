@@ -8,6 +8,7 @@ import { exportSheets } from '../lib/excel';
 import { cellText, detectHeaderRow, guessMapping, readWorkbook, sheetRows, toNumber } from '../lib/excelImport';
 import { useCustomers } from '../components/CustomerPicker';
 import AddFieldButton from '../components/AddFieldButton';
+import { ActivityForm } from './Activities';
 import { isAutoCode, reserveCodes } from '../lib/codes';
 import { confirmDelete, CustomFieldInputs, customValue, Empty, ErrorBox, Field, Modal, Stat } from '../components/ui';
 
@@ -47,13 +48,14 @@ function toType(v, fallback = 'Khách mới') {
 }
 
 export default function Customers() {
-  const { email, isAdmin, config, staffList, staffName } = useApp();
+  const { email, isAdmin, config, staffList, staffName, profile } = useApp();
   const [staff, setStaff] = useState('');
   const [search, setSearch] = useState('');
   const [stage, setStage] = useState('');
   const [ctype, setCtype] = useState('');
   const [edit, setEdit] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [activity, setActivity] = useState(null);
   const fields = config.customFields.customers || [];
   const { data, error } = useCustomers(staff);
   const s = norm(search);
@@ -150,6 +152,7 @@ export default function Customers() {
                   {fields.map((f) => <td key={f.key}>{String(customValue(f, c.custom?.[f.key]))}</td>)}
                   <td className="nowrap">
                     {(isAdmin || c.ownerEmail === email) && <>
+                      <button className="btn sm primary" onClick={() => setActivity({ date: today(), customerId: c.id, customerName: c.name, type: '', content: '', result: '', nextAction: '', nextDate: '', custom: {} })}>📞 Ghi hoạt động</button>{' '}
                       <button className="btn sm" onClick={() => setEdit(c)}>Sửa</button>{' '}
                       <button className="btn sm danger" onClick={() => confirmDelete('Xóa khách hàng này? (Đơn hàng, hoạt động cũ vẫn giữ)') && removeDoc('customers', c.id)}>Xóa</button>
                     </>}
@@ -161,6 +164,7 @@ export default function Customers() {
         )}
       </div>
       {edit && <CustomerForm initial={edit} onClose={() => setEdit(null)} />}
+      {activity && <ActivityForm initial={activity} onClose={() => setActivity(null)} profile={profile} config={config} fields={config.customFields.activities || []} />}
       {importing && <ImportCustomers existing={data} onClose={() => setImporting(false)} />}
     </>
   );
