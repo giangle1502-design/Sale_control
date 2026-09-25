@@ -9,6 +9,8 @@ import {
 } from '../lib/utils';
 import { exportSheets } from '../lib/excel';
 import { customValue, Empty, ErrorBox, FilterBar, Stat, useRange } from '../components/ui';
+import { useCustomers } from '../components/CustomerPicker';
+import { buildContactMap } from './Customers';
 
 const BAR = '#1565c0';
 const short = (v) => (v >= 1e9 ? fmtNum(v / 1e9, 1) + ' tỷ' : v >= 1e6 ? fmtNum(v / 1e6, 1) + ' tr' : fmtNum(v, 0));
@@ -28,6 +30,26 @@ export default function Dashboard() {
   const custs = useQuery(() => scopedQuery('customers', { ...scope, dateField: 'createdDate' }), deps);
   const tasks = useQuery(() => scopedQuery('tasks', { me: email, isAdmin, staffFilter: staff }), [email, isAdmin, staff]);
 
+  // Tình trạng chăm sóc KH: tính trên toàn bộ khách và toàn bộ hoạt động (không phụ thuộc kỳ báo cáo)
+  const allCusts = useCustomers(staff);
+  const allActs = useQuery(() => scopedQuery('activities', { me: email, isAdmin, staffFilter: staff }), [email, isAdmin, staff]);
+  const care = useMemo(() => {
+    const contactOf = buildContactMap(allActs.data);
+    const map = new Map();
+    allCusts.data.forEach((c) => {
+      const k = c.ownerEmail || '';
+      if (!map.has(k)) map.set(k, { email: k, total: 0, contacted: 0, week: 0, stale30: 0, never: 0, due: 0 });
+      const r = map.get(k); const x = contactOf(c);
+      r.total += 1;
+      if (!x.count) r.never += 1; else { r.contacted += 1; if (x.days <= 7) r.week += 1; if (x.days > 30) r.stale30 += 1; }
+      if (x.nextDue) r.due += 1;
+    });
+    const rows = [...map.values()].sort((a, b) => String(staffName(a.email) || '').localeCompare(String(staffName(b.email) || '')));
+    const sum = rows.reduce((t, r) => { Object.keys(t).forEach((k) => { t[k] += r[k]; }); return t; }, { total: 0, contacted: 0, week: 0, stale30: 0, never: 0, due: 0 });
+    return { rows, sum };
+  }, [allCusts.data, allActs.data, staffList]);
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+
   const visibleStaff = isAdmin ? (staff ? staffList.filter((s) => s.email === staff) : staffList) : staffList.filter((s) => s.email === email);
   const rep = useMemo(() => buildReport({
     activities: acts.data, quotes: quos.data, orders: ords.data, payments: pays.data, tasks: tasks.data, notes: notes.data,
@@ -39,7 +61,7 @@ export default function Dashboard() {
     .map((x) => ({ ...x, label: fmtDate(x.date).slice(0, 5) }));
   const multiDay = days.length > 1;
   const t = rep.total;
-  const err = acts.error || quos.error || ords.error || pays.error || notes.error || custs.error || tasks.error;
+  const err = allActs.error || allCusts.error || acts.error || quos.error || ords.error || pays.error || notes.error || custs.error || tasks.error;
   const missingNotes = range.to >= today() && range.from <= today()
     ? rep.staff.filter((s) => s.role !== 'admin' && !notes.data.some((n) => n.ownerEmail === s.email && n.date === today()))
     : [];
@@ -54,6 +76,10 @@ export default function Dashboard() {
         'KH mới': s.newCustomers, 'Báo giá': s.quotes, 'Giá trị báo giá': Math.round(s.quoteAmount), 'BG đã chốt': s.quotesWon, 'Đơn chốt': s.orders, 'Sản lượng (tấn)': +(s.kg / 1000).toFixed(3),
         'Doanh số': Math.round(s.amount), 'Đã thu': Math.round(s.collected), 'Việc hoàn thành': s.tasksDone,
         'Việc đang mở': s.tasksOpen, 'Việc quá hạn': s.tasksOverdue, 'Số ngày có báo cáo': s.notes,
+      })),
+      'Chăm sóc KH': care.rows.map((r) => ({
+        'Nhân viên': staffName(r.email) || '(chưa phân bổ)', 'KH phụ trách': r.total, 'Đã từng liên hệ': r.contacted, '% đã liên hệ': pct(r.contacted, r.total) + '%',
+        'Chưa liên hệ lần nào': r.never, 'LH trong 7 ngày': r.week, 'Quá 30 ngày chưa LH': r.stale30, 'Hẹn đến hạn/quá hạn': r.due,
       })),
       'Theo ngày': rep.byDay.map((d) => ({ Ngày: fmtDate(d.date), 'Hoạt động': d.activities, 'Sản lượng (tấn)': +(d.kg / 1000).toFixed(3), 'Doanh số': Math.round(d.amount), 'Đã thu': Math.round(d.collected) })),
       'Theo sản phẩm': rep.byProduct.map((p) => ({ 'Sản phẩm': p.product, 'Sản lượng (tấn)': +(p.kg / 1000).toFixed(3), 'Doanh số': Math.round(p.amount) })),
@@ -153,6 +179,38 @@ export default function Dashboard() {
           </table>
         )}
       </div>
+
+      <div className="section-title">Tình trạng chăm sóc khách hàng <span className="small">(tính đến hôm nay, trên toàn bộ khách được phân bổ)</span></div>
+      <div className="table-wrap">
+        {care.rows.length === 0 ? <Empty /> : (
+          <table>
+            <thead><tr>
+              <th>Nhân viên</th><th className="num">KH phụ trách</th><th className="num">Đã liên hệ</th><th className="num">Chưa liên hệ lần nào</th>
+              <th className="num">LH trong 7 ngày</th><th className="num">Quá 30 ngày chưa LH</th><th className="num">Hẹn đến hạn / quá hạn</th>
+            </tr></thead>
+            <tbody>
+              {care.rows.map((r) => (
+                <tr key={r.email}>
+                  <td><b>{staffName(r.email) || '(chưa phân bổ)'}</b></td>
+                  <td className="num">{r.total}</td>
+                  <td className="num">{r.contacted} <span className="small">({pct(r.contacted, r.total)}%)</span></td>
+                  <td className="num">{r.never > 0 ? <span className="badge red">{r.never}</span> : 0}</td>
+                  <td className="num">{r.week > 0 ? <span className="badge green">{r.week}</span> : 0}</td>
+                  <td className="num">{r.stale30 > 0 ? <span className="badge amber">{r.stale30}</span> : 0}</td>
+                  <td className="num">{r.due > 0 ? <span className="badge red">{r.due}</span> : 0}</td>
+                </tr>
+              ))}
+            </tbody>
+            {care.rows.length > 1 && (
+              <tfoot><tr>
+                <td>Tổng</td><td className="num">{care.sum.total}</td><td className="num">{care.sum.contacted} ({pct(care.sum.contacted, care.sum.total)}%)</td>
+                <td className="num">{care.sum.never}</td><td className="num">{care.sum.week}</td><td className="num">{care.sum.stale30}</td><td className="num">{care.sum.due}</td>
+              </tr></tfoot>
+            )}
+          </table>
+        )}
+      </div>
+      <p className="small">Xem danh sách chi tiết từng khách tại mục <b>Khách hàng</b> → bấm vào ô "Chưa liên hệ lần nào" hoặc "Quá 30 ngày chưa liên hệ".</p>
 
       <div className="grid2" style={{ marginTop: 14 }}>
         <div>
