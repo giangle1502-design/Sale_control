@@ -85,7 +85,7 @@ export default function Activities() {
   );
 }
 
-function ActivityForm({ initial, onClose, profile, config, fields }) {
+export function ActivityForm({ initial, onClose, profile, config, fields }) {
   const [f, setF] = useState({ ...blank(), ...initial, custom: initial.custom || {} });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
