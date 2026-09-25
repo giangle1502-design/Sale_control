@@ -124,9 +124,11 @@ export function ErrorBox({ error }) {
   );
 }
 
-export function Stat({ label, value, sub, tone }) {
+export function Stat({ label, value, sub, tone, onClick, active }) {
   return (
-    <div className={'stat ' + (tone || '')}>
+    <div className={'stat ' + (tone || '')} onClick={onClick}
+      style={onClick ? { cursor: 'pointer', outline: active ? '2px solid var(--primary)' : 'none' } : undefined}
+      title={onClick ? 'Bấm để lọc danh sách' : undefined}>
       <div className="stat-label">{label}</div>
       <div className="stat-value">{value}</div>
       {sub && <div className="stat-sub">{sub}</div>}
