@@ -2,7 +2,8 @@ import { useMemo, useRef, useState } from 'react';
 import { collection, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useApp } from '../context/AppContext';
-import { removeDoc, saveDoc } from '../lib/data';
+import { removeDoc, saveDoc, scopedQuery } from '../lib/data';
+import { useQuery } from '../lib/hooks';
 import { CUSTOMER_TYPE_HINT, CUSTOMER_TYPES, fmtDate, norm, today } from '../lib/utils';
 import { exportSheets } from '../lib/excel';
 import { cellText, detectHeaderRow, guessMapping, readWorkbook, sheetRows, toNumber } from '../lib/excelImport';
@@ -40,6 +41,72 @@ const COLS = [
   ['note', 'Ghi chú', ['ghi chu', 'note']],
 ];
 
+const CONTACT_FILTERS = [
+  ['', 'Tình trạng liên hệ: tất cả'],
+  ['never', 'Chưa liên hệ lần nào'],
+  ['7', 'Quá 7 ngày chưa liên hệ'],
+  ['30', 'Quá 30 ngày chưa liên hệ'],
+  ['due', 'Có hẹn đến hạn / quá hạn'],
+  ['week', 'Đã liên hệ trong 7 ngày'],
+];
+const SORTS = [['name', 'Sắp xếp: Tên KH'], ['stale', 'Lâu chưa liên hệ nhất'], ['recent', 'Liên hệ gần nhất'], ['due', 'Lịch hẹn gần nhất']];
+
+const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
+
+// Gom lịch sử hoạt động theo từng khách hàng
+function buildContactMap(acts) {
+  const byId = new Map();
+  const byName = new Map();
+  const sorted = [...acts].sort((a, b) => (b.date || '').localeCompare(a.date || '') || String(b.createdAt?.seconds || 0).localeCompare(String(a.createdAt?.seconds || 0)));
+  sorted.forEach((a) => {
+    const add = (map, k) => { if (!k) return; if (!map.has(k)) map.set(k, []); map.get(k).push(a); };
+    add(byId, a.customerId);
+    if (!a.customerId) add(byName, norm(a.customerName));
+  });
+  return (c) => {
+    const list = [...(byId.get(c.id) || []), ...(byName.get(norm(c.name)) || [])];
+    if (list.length > 1) list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const last = list[0];
+    const t = today();
+    // Hẹn tiếp theo: lấy hẹn của lần liên hệ gần nhất (nếu có)
+    const next = last?.nextDate ? { date: last.nextDate, action: last.nextAction } : null;
+    return {
+      list, count: list.length, last,
+      days: last ? daysBetween(last.date, t) : null,
+      next, nextDue: !!(next && next.date <= t),
+    };
+  };
+}
+
+function ContactCell({ info, onHistory }) {
+  if (!info.count) return <span className="badge red">Chưa liên hệ</span>;
+  const { last, days } = info;
+  const tone = days <= 7 ? 'green' : days <= 30 ? 'amber' : 'red';
+  return (
+    <div style={{ minWidth: 170 }}>
+      <span className={'badge ' + tone}>{days === 0 ? 'Hôm nay' : `${days} ngày trước`}</span>{' '}
+      <span className="small">{fmtDate(last.date)}</span>
+      <div className="small"><b>{last.type}</b>{last.result ? ': ' + clip(last.result) : last.content ? ': ' + clip(last.content) : ''}</div>
+      <a href="#" className="small" onClick={(e) => { e.preventDefault(); onHistory(); }}>Xem {info.count} lần liên hệ ›</a>
+    </div>
+  );
+}
+const clip = (s, n = 60) => (s && s.length > n ? s.slice(0, n) + '…' : s);
+
+function NextCell({ info }) {
+  if (!info.next) return <span className="small">-</span>;
+  const t = today();
+  const tone = info.next.date < t ? 'red' : info.next.date === t ? 'amber' : 'blue';
+  const label = info.next.date < t ? 'Quá hẹn' : info.next.date === t ? 'Hôm nay' : fmtDate(info.next.date);
+  return (
+    <div style={{ minWidth: 120 }}>
+      <span className={'badge ' + tone}>{label}</span>
+      {info.next.date < t && <span className="small"> {fmtDate(info.next.date)}</span>}
+      {info.next.action && <div className="small">{clip(info.next.action, 50)}</div>}
+    </div>
+  );
+}
+
 function toType(v, fallback = 'Khách mới') {
   const s = norm(v);
   if (!s) return fallback;
@@ -56,19 +123,52 @@ export default function Customers() {
   const [edit, setEdit] = useState(null);
   const [importing, setImporting] = useState(false);
   const [activity, setActivity] = useState(null);
+  const [history, setHistory] = useState(null);
+  const [contactF, setContactF] = useState('');
+  const [sortBy, setSortBy] = useState('name');
   const fields = config.customFields.customers || [];
   const { data, error } = useCustomers(staff);
+  const acts = useQuery(() => scopedQuery('activities', { me: email, isAdmin, staffFilter: staff }), [email, isAdmin, staff]);
+  const contactOf = useMemo(() => buildContactMap(acts.data), [acts.data]);
+  const info = useMemo(() => new Map(data.map((c) => [c.id, contactOf(c)])), [data, contactOf]);
+  const inf = (c) => info.get(c.id) || { count: 0, list: [] };
+  const matchContact = (c) => {
+    const x = inf(c);
+    switch (contactF) {
+      case 'never': return !x.count;
+      case '7': return !x.count || x.days > 7;
+      case '30': return !x.count || x.days > 30;
+      case 'due': return x.nextDue;
+      case 'week': return x.count > 0 && x.days <= 7;
+      default: return true;
+    }
+  };
   const s = norm(search);
+  const sorters = {
+    name: (a, b) => (a.name || '').localeCompare(b.name || ''),
+    stale: (a, b) => (inf(b).count ? inf(b).days : 1e9) - (inf(a).count ? inf(a).days : 1e9),
+    recent: (a, b) => (inf(b).last?.date || '').localeCompare(inf(a).last?.date || ''),
+    due: (a, b) => (inf(a).next?.date || '9999').localeCompare(inf(b).next?.date || '9999'),
+  };
   const rows = data
-    .filter((c) => (!stage || c.stage === stage) && (!ctype || (c.customerType || 'Khách mới') === ctype)
+    .filter((c) => (!stage || c.stage === stage) && (!ctype || (c.customerType || 'Khách mới') === ctype) && matchContact(c)
       && (!s || [c.name, c.code, c.contact, c.phone, c.taxCode].some((v) => norm(v).includes(s))))
-    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  const cnt = useMemo(() => ({
-    all: data.length,
-    old: data.filter((c) => c.customerType === 'Khách cũ').length,
-    fresh: data.filter((c) => (c.customerType || 'Khách mới') === 'Khách mới').length,
-    needCode: data.filter((c) => c.customerType === 'Khách cũ' && (!c.code || isAutoCode(c.code))).length,
-  }), [data]);
+    .sort(sorters[sortBy] || sorters.name);
+  const cnt = useMemo(() => {
+    const all = [...info.values()];
+    return {
+      all: data.length,
+      old: data.filter((c) => c.customerType === 'Khách cũ').length,
+      fresh: data.filter((c) => (c.customerType || 'Khách mới') === 'Khách mới').length,
+      needCode: data.filter((c) => c.customerType === 'Khách cũ' && (!c.code || isAutoCode(c.code))).length,
+      never: all.filter((x) => !x.count).length,
+      stale30: all.filter((x) => x.count && x.days > 30).length,
+      due: all.filter((x) => x.nextDue).length,
+      week: all.filter((x) => x.count && x.days <= 7).length,
+    };
+  }, [data, info]);
+  const toggle = (k) => setContactF(contactF === k ? '' : k);
+  const newActivity = (c) => setActivity({ date: today(), customerId: c.id, customerName: c.name, type: '', content: '', result: '', nextAction: '', nextDate: '', custom: {} });
 
   const doExport = () => exportSheets(`KhachHang_${today()}`, {
     'Khách hàng': rows.map((c) => ({
@@ -78,6 +178,12 @@ export default function Customers() {
       Nguồn: c.source, 'Giai đoạn': c.stage, 'Loại hạt đang dùng': c.productsUsed, 'Sản lượng/tháng (tấn)': c.monthlyVolume,
       'Ghi chú': c.note, 'Ngày tạo': fmtDate(c.createdDate),
       ...Object.fromEntries(fields.map((f) => [f.label, customValue(f, c.custom?.[f.key])])),
+      'Số lần liên hệ': inf(c).count,
+      'Liên hệ gần nhất': fmtDate(inf(c).last?.date),
+      'Số ngày chưa liên hệ': inf(c).count ? inf(c).days : 'Chưa liên hệ',
+      'Loại liên hệ gần nhất': inf(c).last?.type || '',
+      'Kết quả gần nhất': inf(c).last?.result || inf(c).last?.content || '',
+      'Hẹn tiếp': fmtDate(inf(c).next?.date), 'Việc hẹn': inf(c).next?.action || '',
     })),
     'Danh sách NV (tham khảo)': staffList.filter((x) => x.active !== false).map((x) => ({ 'Họ tên': x.name, Email: x.email, 'Vai trò': x.role === 'admin' ? 'Quản trị' : 'Sale' })),
   });
@@ -116,6 +222,12 @@ export default function Customers() {
         <Stat label="Khách mới (đang chào)" value={cnt.fresh} tone="amber" />
         {cnt.needCode > 0 && <Stat label="Khách cũ còn mã tạm" value={cnt.needCode} sub="Cập nhật mã kế toán (nhập Excel hoặc Sửa)" tone="red" />}
       </div>
+      <div className="stats">
+        <Stat label="Chưa liên hệ lần nào" value={cnt.never} tone="red" onClick={() => toggle('never')} active={contactF === 'never'} />
+        <Stat label="Quá 30 ngày chưa liên hệ" value={cnt.stale30} tone="amber" onClick={() => toggle('30')} active={contactF === '30'} />
+        <Stat label="Hẹn đến hạn / quá hạn" value={cnt.due} tone="red" onClick={() => toggle('due')} active={contactF === 'due'} />
+        <Stat label="Đã liên hệ trong 7 ngày" value={cnt.week} tone="green" onClick={() => toggle('week')} active={contactF === 'week'} />
+      </div>
       <div className="filters">
         <input placeholder="Tìm tên, mã KH, SĐT, MST…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select value={ctype} onChange={(e) => setCtype(e.target.value)}>
@@ -124,6 +236,12 @@ export default function Customers() {
         <select value={stage} onChange={(e) => setStage(e.target.value)}>
           <option value="">Tất cả giai đoạn</option>{STAGES.map((x) => <option key={x}>{x}</option>)}
         </select>
+        <select value={contactF} onChange={(e) => setContactF(e.target.value)}>
+          {CONTACT_FILTERS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </select>
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          {SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </select>
         {isAdmin && (
           <select value={staff} onChange={(e) => setStaff(e.target.value)}>
             <option value="">Tất cả nhân viên</option>
@@ -131,11 +249,11 @@ export default function Customers() {
           </select>
         )}
       </div>
-      <ErrorBox error={error} />
+      <ErrorBox error={error || acts.error} />
       <div className="table-wrap">
         {rows.length === 0 ? <Empty /> : (
           <table>
-            <thead><tr><th>Mã KH</th><th>Khách hàng</th><th>Loại</th><th>Liên hệ</th><th>Giai đoạn</th><th>Đang dùng</th>{isAdmin && <th>Phụ trách</th>}
+            <thead><tr><th>Mã KH</th><th>Khách hàng</th><th>Loại</th><th>Liên hệ</th><th>Giai đoạn</th><th>Liên hệ gần nhất</th><th>Hẹn tiếp</th><th>Đang dùng</th>{isAdmin && <th>Phụ trách</th>}
               {fields.map((f) => <th key={f.key}>{f.label}</th>)}<th></th></tr></thead>
             <tbody>
               {rows.map((c) => (
@@ -147,12 +265,14 @@ export default function Customers() {
                   <td><span className={'badge ' + TYPE_TONE[c.customerType || 'Khách mới']} title={CUSTOMER_TYPE_HINT[c.customerType || 'Khách mới']}>{c.customerType || 'Khách mới'}</span></td>
                   <td>{c.contact}<div className="small">{c.phone} {c.email}</div></td>
                   <td><span className={'badge ' + (TONE[c.stage] || '')}>{c.stage || '-'}</span></td>
+                  <td><ContactCell info={inf(c)} onHistory={() => setHistory(c)} /></td>
+                  <td><NextCell info={inf(c)} /></td>
                   <td>{c.productsUsed}{c.monthlyVolume && <div className="small">{c.monthlyVolume} tấn/tháng</div>}</td>
                   {isAdmin && <td>{staffName(c.ownerEmail)}</td>}
                   {fields.map((f) => <td key={f.key}>{String(customValue(f, c.custom?.[f.key]))}</td>)}
                   <td className="nowrap">
                     {(isAdmin || c.ownerEmail === email) && <>
-                      <button className="btn sm primary" onClick={() => setActivity({ date: today(), customerId: c.id, customerName: c.name, type: '', content: '', result: '', nextAction: '', nextDate: '', custom: {} })}>📞 Ghi hoạt động</button>{' '}
+                      <button className="btn sm primary" onClick={() => newActivity(c)}>📞 Ghi hoạt động</button>{' '}
                       <button className="btn sm" onClick={() => setEdit(c)}>Sửa</button>{' '}
                       <button className="btn sm danger" onClick={() => confirmDelete('Xóa khách hàng này? (Đơn hàng, hoạt động cũ vẫn giữ)') && removeDoc('customers', c.id)}>Xóa</button>
                     </>}
@@ -165,8 +285,42 @@ export default function Customers() {
       </div>
       {edit && <CustomerForm initial={edit} onClose={() => setEdit(null)} />}
       {activity && <ActivityForm initial={activity} onClose={() => setActivity(null)} profile={profile} config={config} fields={config.customFields.activities || []} />}
+      {history && <HistoryModal customer={history} info={inf(history)} staffName={staffName} isAdmin={isAdmin}
+        onAdd={() => { const c = history; setHistory(null); newActivity(c); }} onClose={() => setHistory(null)} />}
       {importing && <ImportCustomers existing={data} onClose={() => setImporting(false)} />}
     </>
+  );
+}
+
+function HistoryModal({ customer, info, staffName, isAdmin, onAdd, onClose }) {
+  return (
+    <Modal title={`Lịch sử liên hệ: ${customer.name}`} onClose={onClose} wide>
+      <div className="small" style={{ marginBottom: 8 }}>
+        {customer.code} · {customer.contact} {customer.phone} · Tổng {info.count} lần liên hệ
+      </div>
+      {info.count === 0 ? <Empty text="Chưa có hoạt động nào với khách này" /> : (
+        <div className="table-wrap" style={{ maxHeight: 420, overflow: 'auto' }}>
+          <table>
+            <thead><tr><th>Ngày</th>{isAdmin && <th>Nhân viên</th>}<th>Loại</th><th>Nội dung / Kết quả</th><th>Việc tiếp theo</th></tr></thead>
+            <tbody>
+              {info.list.map((a) => (
+                <tr key={a.id}>
+                  <td className="nowrap">{fmtDate(a.date)}</td>
+                  {isAdmin && <td>{staffName(a.ownerEmail)}</td>}
+                  <td><span className="badge blue">{a.type}</span></td>
+                  <td>{a.content}{a.result && <div className="small">→ {a.result}</div>}</td>
+                  <td>{a.nextAction}{a.nextDate && <div className="small">Hẹn: {fmtDate(a.nextDate)}</div>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="form-actions">
+        <button type="button" className="btn" onClick={onClose}>Đóng</button>
+        <button type="button" className="btn primary" onClick={onAdd}>📞 Ghi hoạt động mới</button>
+      </div>
+    </Modal>
   );
 }
 
