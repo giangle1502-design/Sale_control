@@ -54,7 +54,7 @@ const SORTS = [['name', 'Sắp xếp: Tên KH'], ['stale', 'Lâu chưa liên h�
 const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
 
 // Gom lịch sử hoạt động theo từng khách hàng
-function buildContactMap(acts) {
+export function buildContactMap(acts) {
   const byId = new Map();
   const byName = new Map();
   const sorted = [...acts].sort((a, b) => (b.date || '').localeCompare(a.date || '') || String(b.createdAt?.seconds || 0).localeCompare(String(a.createdAt?.seconds || 0)));
