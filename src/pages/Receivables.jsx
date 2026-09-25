@@ -3,7 +3,8 @@ import { collection, doc, getDocs, onSnapshot, query, serverTimestamp, setDoc, w
 import { db } from '../firebase';
 import { useApp } from '../context/AppContext';
 import { useQuery } from '../lib/hooks';
-import { fmtDate, fmtMoney, norm, today } from '../lib/utils';
+import { scopedQuery } from '../lib/data';
+import { fmtDate, fmtMoney, norm, num, today } from '../lib/utils';
 import { exportSheets } from '../lib/excel';
 import { cellText, detectHeaderRow, guessMapping, readWorkbook, sheetRows, toNumber, toYmd } from '../lib/excelImport';
 import { useCustomers } from '../components/CustomerPicker';
@@ -46,7 +47,9 @@ function buildHeaders(rows, hr) {
   return { headers, start: hr + 2 };
 }
 
-export default function Receivables({ staffFilter }) {
+const toMs = (v) => (v?.toMillis ? v.toMillis() : Date.parse(v) || 0);
+
+export default function Receivables({ staffFilter, onCollect }) {
   const { email, isAdmin, staffName } = useApp();
   const [meta, setMeta] = useState(null);
   const [search, setSearch] = useState('');
@@ -63,11 +66,19 @@ export default function Receivables({ staffFilter }) {
     [batchId, owner]
   );
 
+  // Phiếu thu ghi trên app SAU lần nhập số liệu kế toán → trừ vào công nợ còn lại
+  const importedAt = toMs((meta || m)?.importedAt);
+  const paysQ = useQuery(
+    () => (batchId ? scopedQuery('payments', { me: email, isAdmin, staffFilter, from: asOf }) : null),
+    [batchId, email, isAdmin, staffFilter, asOf]
+  );
+  const newPays = useMemo(() => paysQ.data.filter((p) => !importedAt || toMs(p.createdAt) > importedAt), [paysQ.data, importedAt]);
+
   const groups = useMemo(() => {
     const g = new Map();
     data.forEach((r) => {
       const k = r.customerCode ? 'c:' + norm(r.customerCode) : 'n:' + norm(r.customerName);
-      if (!g.has(k)) g.set(k, { key: k, code: r.customerCode, name: r.customerName, ownerEmail: r.ownerEmail, lines: [], total: 0, overdue: 0, maxDays: 0, nextDue: '' });
+      if (!g.has(k)) g.set(k, { key: k, code: r.customerCode, name: r.customerName, customerId: r.customerId || '', ownerEmail: r.ownerEmail, lines: [], total: 0, overdue: 0, maxDays: 0, nextDue: '', paid: 0 });
       const x = g.get(k);
       const od = lineOverdue(r, asOf);
       x.lines.push({ ...r, od });
@@ -76,22 +87,30 @@ export default function Receivables({ staffFilter }) {
       x.maxDays = Math.max(x.maxDays, od);
       if (r.dueDate && r.dueDate >= asOf && (!x.nextDue || r.dueDate < x.nextDue)) x.nextDue = r.dueDate;
     });
+    const all = [...g.values()];
+    newPays.forEach((p) => {
+      const x = all.find((y) => (p.customerId && y.customerId === p.customerId) || norm(y.name) === norm(p.customerName));
+      if (x) x.paid += num(p.amount);
+    });
+    all.forEach((x) => { x.remaining = Math.max(0, x.total - x.paid); });
     const s = norm(search);
-    return [...g.values()]
+    return all
       .filter((x) => (!s || norm(x.name).includes(s) || norm(x.code).includes(s)) && (!onlyOverdue || x.overdue > 0))
       .sort((a, b) => b.total - a.total);
-  }, [data, search, onlyOverdue, asOf]);
+  }, [data, search, onlyOverdue, asOf, newPays]);
 
   const tot = {
     total: groups.reduce((s, x) => s + x.total, 0),
     overdue: groups.reduce((s, x) => s + x.overdue, 0),
+    paid: groups.reduce((s, x) => s + x.paid, 0),
+    remaining: groups.reduce((s, x) => s + x.remaining, 0),
     unassigned: groups.filter((x) => !x.ownerEmail).length,
   };
 
   const doExport = () => exportSheets(`CongNo_KeToan_${asOf}`, {
     'Theo khách hàng': groups.map((x) => ({
       'Mã KH': x.code, 'Khách hàng': x.name, 'NV phụ trách': x.ownerEmail ? staffName(x.ownerEmail) : '(chưa gán)',
-      'Số chứng từ': x.lines.length, 'Tổng nợ': Math.round(x.total), 'Quá hạn': Math.round(x.overdue), 'Quá hạn lâu nhất (ngày)': x.maxDays,
+      'Số chứng từ': x.lines.length, 'Tổng nợ': Math.round(x.total), 'Đã thu trên app': Math.round(x.paid), 'Còn lại': Math.round(x.remaining), 'Quá hạn': Math.round(x.overdue), 'Quá hạn lâu nhất (ngày)': x.maxDays,
     })),
     'Chi tiết': groups.flatMap((x) => x.lines.map((r) => ({
       'Mã KH': r.customerCode, 'Khách hàng': r.customerName, 'NV phụ trách': r.ownerEmail ? staffName(r.ownerEmail) : '',
@@ -114,6 +133,7 @@ export default function Receivables({ staffFilter }) {
       </div>
       <div className="stats">
         <Stat label="Tổng phải thu" value={fmtMoney(tot.total) + ' đ'} sub={`${groups.length} khách hàng`} tone="amber" />
+        <Stat label="Đã thu (ghi trên app sau ngày số liệu)" value={fmtMoney(tot.paid) + ' đ'} sub={`Còn lại ${fmtMoney(tot.remaining)} đ`} tone="green" />
         <Stat label="Quá hạn" value={fmtMoney(tot.overdue) + ' đ'} sub={tot.total ? Math.round((tot.overdue / tot.total) * 100) + '% tổng nợ' : ''} tone="red" />
         {isAdmin && <Stat label="Khách chưa gán NV" value={tot.unassigned} sub="Thêm Mã KH / tên khớp ở mục Khách hàng rồi nhập lại" />}
       </div>
@@ -122,14 +142,14 @@ export default function Receivables({ staffFilter }) {
         {groups.length === 0 ? <Empty text={batchId ? 'Không có công nợ' : 'Quản trị bấm "Nhập công nợ từ Excel kế toán" để tải danh sách'} /> : (
           <table>
             <thead><tr><th></th><th>Mã KH</th><th>Khách hàng</th>{isAdmin && <th>NV phụ trách</th>}<th className="num">Số CT</th>
-              <th className="num">Tổng nợ</th><th className="num">Quá hạn</th><th className="num">Quá hạn lâu nhất</th><th>Hạn kế tiếp</th></tr></thead>
+              <th className="num">Tổng nợ</th><th className="num">Đã thu</th><th className="num">Còn lại</th><th className="num">Quá hạn</th><th className="num">Quá hạn lâu nhất</th><th>Hạn kế tiếp</th><th></th></tr></thead>
             <tbody>
               {groups.map((x) => (
-                <FragmentRows key={x.key} x={x} open={!!expand[x.key]} toggle={() => setExpand({ ...expand, [x.key]: !expand[x.key] })} isAdmin={isAdmin} staffName={staffName} />
+                <FragmentRows key={x.key} x={x} open={!!expand[x.key]} toggle={() => setExpand({ ...expand, [x.key]: !expand[x.key] })} isAdmin={isAdmin} staffName={staffName} canCollect={isAdmin || x.ownerEmail === email} onCollect={onCollect} />
               ))}
             </tbody>
             <tfoot><tr><td></td><td></td><td>Tổng</td>{isAdmin && <td></td>}<td></td>
-              <td className="num">{fmtMoney(tot.total)}</td><td className="num">{fmtMoney(tot.overdue)}</td><td></td><td></td></tr></tfoot>
+              <td className="num">{fmtMoney(tot.total)}</td><td className="num">{fmtMoney(tot.paid)}</td><td className="num">{fmtMoney(tot.remaining)}</td><td className="num">{fmtMoney(tot.overdue)}</td><td></td><td></td><td></td></tr></tfoot>
           </table>
         )}
       </div>
@@ -138,7 +158,8 @@ export default function Receivables({ staffFilter }) {
   );
 }
 
-function FragmentRows({ x, open, toggle, isAdmin, staffName }) {
+function FragmentRows({ x, open, toggle, isAdmin, staffName, canCollect, onCollect }) {
+  const cust = { customerId: x.customerId, customerName: x.name };
   return (
     <>
       <tr>
@@ -147,20 +168,32 @@ function FragmentRows({ x, open, toggle, isAdmin, staffName }) {
         <td><b>{x.name}</b></td>
         {isAdmin && <td>{x.ownerEmail ? staffName(x.ownerEmail) : <span className="badge red">Chưa gán</span>}</td>}
         <td className="num">{x.lines.length}</td>
-        <td className="num"><b>{fmtMoney(x.total)}</b></td>
+        <td className="num">{fmtMoney(x.total)}</td>
+        <td className="num">{x.paid > 0 ? <span style={{ color: 'var(--green)' }}>{fmtMoney(x.paid)}</span> : '-'}</td>
+        <td className="num"><b>{fmtMoney(x.remaining)}</b></td>
         <td className="num">{x.overdue > 0 ? <span className="badge red">{fmtMoney(x.overdue)}</span> : '-'}</td>
         <td className="num">{x.maxDays > 0 ? x.maxDays + ' ngày' : '-'}</td>
         <td>{fmtDate(x.nextDue)}</td>
+        <td className="nowrap">
+          {canCollect && onCollect && x.remaining > 0 && (
+            <button className="btn sm primary" onClick={() => onCollect(cust, x.remaining)}>💰 Ghi thu tiền</button>
+          )}
+        </td>
       </tr>
       {open && x.lines.map((r) => (
         <tr key={r.id} style={{ background: '#fafbfd' }}>
           <td></td><td className="small">{r.docNo}</td>
           <td className="small">Ngày {fmtDate(r.docDate)}{r.note && ' · ' + r.note}</td>
           {isAdmin && <td></td>}<td></td>
-          <td className="num small">{fmtMoney(r.amount)}</td>
+          <td className="num small">{fmtMoney(r.amount)}</td><td></td><td></td>
           <td className="num small">{r.od > 0 ? <span style={{ color: 'var(--red)' }}>{fmtMoney(r.amount)}</span> : ''}</td>
           <td className="num small">{r.od > 0 ? r.od + ' ngày' : ''}</td>
           <td className="small">{fmtDate(r.dueDate)}</td>
+          <td className="nowrap">
+            {canCollect && onCollect && (
+              <button className="btn sm" onClick={() => onCollect({ ...cust, orderNo: r.docNo || '' }, r.amount)}>Thu HĐ này</button>
+            )}
+          </td>
         </tr>
       ))}
     </>
