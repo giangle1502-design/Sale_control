@@ -91,7 +91,7 @@ export default function Debts() {
           </select>
         )}
       </div>
-      {tab === 'acc' ? <Receivables staffFilter={staff} onCollect={(c, amt) => { setOutstanding(amt); setEdit({ ...blank(), ...c }); }} /> : <>
+      {tab === 'acc' ? <Receivables staffFilter={staff} setStaffFilter={setStaff} onCollect={(c, amt) => { setOutstanding(amt); setEdit({ ...blank(), ...c }); }} /> : <>
       {tab === 'pay' && <FilterBar range={range} setRange={setRange} />}
       <div className="stats">
         <Stat label="Tổng còn phải thu" value={fmtMoney(totals.balance) + ' đ'} tone="amber" />
