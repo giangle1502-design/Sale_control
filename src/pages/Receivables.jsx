@@ -50,8 +50,9 @@ function buildHeaders(rows, hr) {
 const toMs = (v) => (v?.toMillis ? v.toMillis() : Date.parse(v) || 0);
 
 export default function Receivables({ staffFilter, setStaffFilter, onCollect }) {
-  const { email, isAdmin, staffName } = useApp();
+  const { email, isAdmin, staffName, staffList } = useApp();
   const [meta, setMeta] = useState(null);
+  const [syncMsg, setSyncMsg] = useState('');
   const [search, setSearch] = useState('');
   const [onlyOverdue, setOnlyOverdue] = useState(false);
   const [expand, setExpand] = useState({});
@@ -65,6 +66,32 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
     () => (batchId ? query(collection(db, 'receivables'), where('batchId', '==', batchId), ...(owner ? [where('ownerEmail', '==', owner)] : [])) : null),
     [batchId, owner]
   );
+
+  // Đồng bộ NV phụ trách của công nợ theo danh sách Khách hàng (chỉ quản trị, khi xem tất cả)
+  const custs = useCustomers(isAdmin ? '' : email);
+  useEffect(() => {
+    if (!isAdmin || owner || !data.length || !custs.data.length) return;
+    const byId = new Map(custs.data.map((c) => [c.id, c]));
+    const byCode = new Map(custs.data.filter((c) => c.code).map((c) => [norm(c.code), c]));
+    const byName = new Map(custs.data.map((c) => [norm(c.name), c]));
+    const nameOf = (e) => staffList.find((s) => s.email === e)?.name || '';
+    const todo = [];
+    data.forEach((r) => {
+      const c = (r.customerId && byId.get(r.customerId)) || (r.customerCode && byCode.get(norm(r.customerCode))) || byName.get(norm(r.customerName));
+      if (c && c.ownerEmail && (c.ownerEmail !== r.ownerEmail || r.customerId !== c.id)) todo.push([r.id, { ownerEmail: c.ownerEmail, ownerName: nameOf(c.ownerEmail), customerId: c.id }]);
+    });
+    if (!todo.length) return;
+    (async () => {
+      try {
+        for (let i = 0; i < todo.length; i += 400) {
+          const b = writeBatch(db);
+          todo.slice(i, i + 400).forEach(([id, v]) => b.update(doc(db, 'receivables', id), v));
+          await b.commit();
+        }
+        setSyncMsg(`Đã cập nhật NV phụ trách cho ${todo.length} dòng công nợ theo danh sách Khách hàng.`);
+      } catch (e) { setSyncMsg('Không đồng bộ được NV phụ trách: ' + e.message); }
+    })();
+  }, [isAdmin, owner, data, custs.data, staffList]);
 
   // Phiếu thu ghi trên app SAU lần nhập số liệu kế toán → trừ vào công nợ còn lại
   const importedAt = toMs((meta || m)?.importedAt);
@@ -152,6 +179,7 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
         {isAdmin && <Stat label="Khách chưa gán NV" value={tot.unassigned} sub="Thêm Mã KH / tên khớp ở mục Khách hàng rồi nhập lại" />}
       </div>
       <ErrorBox error={error} />
+      {syncMsg && <div className="ok-box" style={{ marginBottom: 10 }}>{syncMsg}</div>}
       {isAdmin && batchId && (
         <>
           <div className="section-title">
