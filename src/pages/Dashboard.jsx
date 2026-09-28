@@ -11,6 +11,7 @@ import { exportSheets } from '../lib/excel';
 import { customValue, Empty, ErrorBox, FilterBar, Stat, useRange } from '../components/ui';
 import { useCustomers } from '../components/CustomerPicker';
 import { buildContactMap } from './Customers';
+import { noteLabel } from './DailyNotes';
 
 const BAR = '#1565c0';
 const short = (v) => (v >= 1e9 ? fmtNum(v / 1e9, 1) + ' tỷ' : v >= 1e6 ? fmtNum(v / 1e6, 1) + ' tr' : fmtNum(v, 0));
@@ -62,9 +63,6 @@ export default function Dashboard() {
   const multiDay = days.length > 1;
   const t = rep.total;
   const err = allActs.error || allCusts.error || acts.error || quos.error || ords.error || pays.error || notes.error || custs.error || tasks.error;
-  const missingNotes = range.to >= today() && range.from <= today()
-    ? rep.staff.filter((s) => s.role !== 'admin' && !notes.data.some((n) => n.ownerEmail === s.email && n.date === today()))
-    : [];
   const followUps = acts.data.filter((a) => a.nextDate && a.nextDate >= today()).sort((a, b) => a.nextDate.localeCompare(b.nextDate)).slice(0, 8);
 
   const doExport = () => {
@@ -75,7 +73,7 @@ export default function Dashboard() {
         'Nhân viên': s.name, 'Hoạt động KH': s.activities, 'Chi tiết HĐ': Object.entries(s.byType).map(([k, v]) => `${k}: ${v}`).join(', '),
         'KH mới': s.newCustomers, 'Báo giá': s.quotes, 'Giá trị báo giá': Math.round(s.quoteAmount), 'BG đã chốt': s.quotesWon, 'Đơn chốt': s.orders, 'Sản lượng (tấn)': +(s.kg / 1000).toFixed(3),
         'Doanh số': Math.round(s.amount), 'Đã thu': Math.round(s.collected), 'Việc hoàn thành': s.tasksDone,
-        'Việc đang mở': s.tasksOpen, 'Việc quá hạn': s.tasksOverdue, 'Số ngày có báo cáo': s.notes,
+        'Việc đang mở': s.tasksOpen, 'Việc quá hạn': s.tasksOverdue, 'Số BC tuần/tháng': s.notes,
       })),
       'Chăm sóc KH': care.rows.map((r) => ({
         'Nhân viên': staffName(r.email) || '(chưa phân bổ)', 'KH phụ trách': r.total, 'Đã từng liên hệ': r.contacted, '% đã liên hệ': pct(r.contacted, r.total) + '%',
@@ -88,7 +86,7 @@ export default function Dashboard() {
       'Đơn hàng': ords.data.map((o) => ({ 'Số ĐH': o.orderNo, Ngày: fmtDate(o.date), 'Nhân viên': staffName(o.ownerEmail), 'Khách hàng': o.customerName, 'Sản phẩm': (o.items || []).map((i) => `${i.product} ${i.grade || ''} ${i.qtyKg}kg×${i.priceKg}`).join('; '), 'Tổng kg': orderKg(o), 'Tổng tiền': Math.round(orderAmount(o)), 'Trạng thái': o.status, ...extra(cf.orders, o) })),
       'Thu tiền': pays.data.map((p) => ({ Ngày: fmtDate(p.date), 'Nhân viên': staffName(p.ownerEmail), 'Khách hàng': p.customerName, 'Số tiền': num(p.amount), 'Hình thức': p.method, 'Ghi chú': p.note, ...extra(cf.payments, p) })),
       'Công việc': tasks.data.map((x) => ({ 'Công việc': x.title, 'Người thực hiện': staffName(x.ownerEmail), Hạn: fmtDate(x.dueDate), 'Trạng thái': x.status, 'Tiến độ %': num(x.progress), 'Quá hạn': isTaskOverdue(x) ? 'Có' : '', ...extra(cf.tasks, x) })),
-      'Báo cáo ngày': notes.data.map((n) => ({ Ngày: fmtDate(n.date), 'Nhân viên': staffName(n.ownerEmail), 'Đã làm': n.summary, 'Khó khăn': n.issues, 'Kế hoạch': n.plan, ...extra(cf.dailyNotes, n) })),
+      'Báo cáo tuần-tháng': notes.data.map((n) => ({ Kỳ: noteLabel(n), 'Nhân viên': staffName(n.ownerEmail), 'Đã làm': n.summary, 'Khó khăn': n.issues, 'Kế hoạch': n.plan, ...extra(cf.dailyNotes, n) })),
     });
   };
 
@@ -109,9 +107,6 @@ export default function Dashboard() {
         <Stat label="Việc quá hạn" value={t.tasksOverdue || 0} tone="red" />
       </div>
 
-      {isAdmin && missingNotes.length > 0 && (
-        <div className="error-box">Chưa gửi báo cáo ngày hôm nay: {missingNotes.map((s) => s.name).join(', ')}</div>
-      )}
 
       {multiDay && (
         <div className="grid2">
@@ -149,7 +144,7 @@ export default function Dashboard() {
             <thead><tr>
               <th>Nhân viên</th><th className="num">Hoạt động</th><th>Chi tiết</th><th className="num">KH mới</th><th className="num">Báo giá</th>
               <th className="num">Đơn chốt</th><th className="num">Tấn</th><th className="num">Doanh số</th><th className="num">Đã thu</th>
-              <th className="num">Việc xong</th><th className="num">Quá hạn</th><th className="num">Báo cáo ngày</th>
+              <th className="num">Việc xong</th><th className="num">Quá hạn</th><th className="num">BC tuần/tháng</th>
             </tr></thead>
             <tbody>
               {rep.staff.map((s) => (
@@ -165,7 +160,7 @@ export default function Dashboard() {
                   <td className="num">{fmtMoney(s.collected)}</td>
                   <td className="num">{s.tasksDone}</td>
                   <td className="num">{s.tasksOverdue > 0 ? <span className="badge red">{s.tasksOverdue}</span> : 0}</td>
-                  <td className="num">{s.notes}/{days.length}</td>
+                  <td className="num">{s.notes}</td>
                 </tr>
               ))}
             </tbody>
