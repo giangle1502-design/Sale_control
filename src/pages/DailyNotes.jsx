@@ -3,10 +3,10 @@ import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useApp } from '../context/AppContext';
 import { useQuery } from '../lib/hooks';
-import { scopedQuery } from '../lib/data';
+import { removeDoc, scopedQuery } from '../lib/data';
 import { addDays, fmtDate, fmtMoney, fmtTon, num, orderAmount, orderKg, REVENUE_STATUSES, today } from '../lib/utils';
 import { exportSheets } from '../lib/excel';
-import { CustomFieldInputs, customValue, Empty, ErrorBox, Field, Stat } from '../components/ui';
+import { confirmDelete, CustomFieldInputs, customValue, Empty, ErrorBox, Field, Stat } from '../components/ui';
 
 // ===== Kỳ báo cáo: tuần (Thứ 2 → Chủ nhật) và tháng =====
 const dow = (ymd) => new Date(ymd + 'T00:00:00Z').getUTCDay(); // 0 = CN
@@ -225,6 +225,9 @@ function NoteList() {
             <span>
               <span className={'badge ' + (n.period === 'month' ? 'green' : n.period === 'week' ? 'blue' : '')}>{noteLabel(n)}</span>
               {n.submittedDate && <span className="small"> · nộp {fmtDate(n.submittedDate)}</span>}
+              {isAdmin && (
+                <>{' '}<button className="btn sm danger" onClick={() => confirmDelete(`Xóa báo cáo "${noteLabel(n)}" của ${staffName(n.ownerEmail)}?`) && removeDoc('dailyNotes', n.id).catch((e) => alert(e.message))}>Xóa</button></>
+              )}
             </span>
           </div>
           {n.summary && <p><b>Đã làm:</b> {n.summary}</p>}
