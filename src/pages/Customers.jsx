@@ -83,11 +83,16 @@ function ContactCell({ info, onHistory }) {
   const { last, days } = info;
   const tone = days <= 7 ? 'green' : days <= 30 ? 'amber' : 'red';
   return (
-    <div style={{ minWidth: 170 }}>
-      <span className={'badge ' + tone}>{days === 0 ? 'Hôm nay' : `${days} ngày trước`}</span>{' '}
-      <span className="small">{fmtDate(last.date)}</span>
-      <div className="small"><b>{last.type}</b>{last.result ? ': ' + clip(last.result) : last.content ? ': ' + clip(last.content) : ''}</div>
-      <a href="#" className="small" onClick={(e) => { e.preventDefault(); onHistory(); }}>Xem {info.count} lần liên hệ ›</a>
+    <div style={{ minWidth: 230 }}>
+      <span className={'badge ' + tone}>{days === 0 ? 'Hôm nay' : `${days} ngày trước`}</span>
+      {info.list.slice(0, 4).map((a, i) => (
+        <div key={a.id || i} className="small" style={{ marginTop: 3, paddingLeft: 6, borderLeft: '2px solid ' + (i === 0 ? 'var(--primary)' : '#dde3ea') }}>
+          <span className="nowrap">{fmtDate(a.date).slice(0, 5)}</span> · <b>{a.type}</b>{a.result ? ': ' + clip(a.result, 50) : a.content ? ': ' + clip(a.content, 50) : ''}
+        </div>
+      ))}
+      <a href="#" className="small" onClick={(e) => { e.preventDefault(); onHistory(); }}>
+        {info.count > 4 ? `Xem tất cả ${info.count} lần liên hệ ›` : 'Xem chi tiết ›'}
+      </a>
     </div>
   );
 }
