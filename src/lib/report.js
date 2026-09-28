@@ -10,7 +10,7 @@ export function buildReport({ activities = [], quotes = [], orders = [], payment
     if (!rows.has(email)) {
       const s = staffList.find((x) => x.email === email);
       rows.set(email, {
-        email, name: s?.name || name || email, role: s?.role || 'sale',
+        email, name: s?.name || (name ? `${name} (${email})` : email), role: s?.role || 'sale', orphan: !s,
         activities: 0, byType: {}, newCustomers: 0, quotes: 0, quoteAmount: 0, quotesWon: 0, orders: 0, kg: 0, amount: 0,
         collected: 0, tasksDone: 0, tasksOpen: 0, tasksOverdue: 0, notes: 0,
       });
