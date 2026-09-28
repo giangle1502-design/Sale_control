@@ -17,7 +17,6 @@ export function renderEmail({ rep, date, config, data, appUrl }) {
   const card = (label, value, color = '#1565c0') =>
     `<td style="padding:10px 12px;border:1px solid #e3e7ed;border-left:4px solid ${color};background:#fff"><div style="font-size:12px;color:#6b7684">${label}</div><div style="font-size:18px;font-weight:700">${value}</div></td>`;
 
-  const missing = rep.staff.filter((s) => s.role !== 'admin' && s.notes === 0);
   const silent = rep.staff.filter((s) => s.role !== 'admin' && s.activities === 0 && s.orders === 0 && s.quotes === 0 && s.collected === 0);
 
   let html = `<div style="font-family:Arial,sans-serif;color:#1c2430;max-width:960px">
@@ -31,19 +30,18 @@ export function renderEmail({ rep, date, config, data, appUrl }) {
     ${card('Việc quá hạn', t.tasksOverdue || 0, '#c62828')}
   </tr></table>`;
 
-  if (missing.length || silent.length) {
+  if (silent.length) {
     html += `<div style="background:#fdecea;color:#c62828;padding:8px 12px;border-radius:6px;font-size:13px;margin:8px 0">
-      ${missing.length ? `<div>Chưa gửi báo cáo ngày: <b>${missing.map((s) => esc(s.name)).join(', ')}</b></div>` : ''}
       ${silent.length ? `<div>Không có hoạt động/đơn hàng nào: <b>${silent.map((s) => esc(s.name)).join(', ')}</b></div>` : ''}
     </div>`;
   }
 
   html += h('Kết quả theo nhân viên') + table(
-    `<tr><th ${th}>Nhân viên</th><th ${th}>Hoạt động</th><th ${th}>Báo giá</th><th ${th}>Đơn chốt</th><th ${th}>Tấn</th><th ${th}>Doanh số</th><th ${th}>Đã thu</th><th ${th}>Việc xong</th><th ${th}>Việc quá hạn</th><th ${th}>Báo cáo</th></tr>`,
+    `<tr><th ${th}>Nhân viên</th><th ${th}>Hoạt động</th><th ${th}>Báo giá</th><th ${th}>Đơn chốt</th><th ${th}>Tấn</th><th ${th}>Doanh số</th><th ${th}>Đã thu</th><th ${th}>Việc xong</th><th ${th}>Việc quá hạn</th></tr>`,
     rep.staff.map((s) => `<tr><td ${td}><b>${esc(s.name)}</b><div style="font-size:11px;color:#6b7684">${esc(Object.entries(s.byType).map(([k, v]) => `${k}: ${v}`).join(' · '))}</div></td>
       <td ${tdr}>${s.activities}</td><td ${tdr}>${s.quotes}</td><td ${tdr}>${s.orders}</td><td ${tdr}>${fmtTon(s.kg)}</td>
       <td ${tdr}>${fmtMoney(s.amount)}</td><td ${tdr}>${fmtMoney(s.collected)}</td><td ${tdr}>${s.tasksDone}</td>
-      <td ${tdr}>${s.tasksOverdue ? `<b style="color:#c62828">${s.tasksOverdue}</b>` : 0}</td><td ${tdr}>${s.notes ? '✔' : '<span style="color:#c62828">✖</span>'}</td></tr>`)
+      <td ${tdr}>${s.tasksOverdue ? `<b style="color:#c62828">${s.tasksOverdue}</b>` : 0}</td></tr>`)
   );
 
   if (config.reportIncludeDetails !== false) {
@@ -51,12 +49,12 @@ export function renderEmail({ rep, date, config, data, appUrl }) {
     const custom = (list, r) => extraCols(list).map((f) => `<td ${td}>${esc(f.type === 'checkbox' ? (r.custom?.[f.key] ? '✓' : '') : r.custom?.[f.key] ?? '')}</td>`).join('');
     const customHead = (list) => extraCols(list).map((f) => `<th ${th}>${esc(f.label)}</th>`).join('');
 
-    html += h('Báo cáo ngày của nhân viên') + (data.notes.length
+    html += h('Báo cáo tuần / tháng nhân viên nộp hôm nay') + (data.notes.length
       ? data.notes.map((n) => `<div style="border:1px solid #e3e7ed;border-radius:6px;padding:8px 12px;margin-bottom:8px;font-size:13px">
-          <b>${name(n.ownerEmail)}</b>
+          <b>${name(n.ownerEmail)}</b> <span style="color:#1565c0">${esc(n.periodLabel || '')}</span>
           ${n.summary ? `<div><b>Đã làm:</b> ${esc(n.summary).replace(/\n/g, '<br>')}</div>` : ''}
           ${n.issues ? `<div><b>Khó khăn/Đề xuất:</b> ${esc(n.issues).replace(/\n/g, '<br>')}</div>` : ''}
-          ${n.plan ? `<div><b>Kế hoạch mai:</b> ${esc(n.plan).replace(/\n/g, '<br>')}</div>` : ''}
+          ${n.plan ? `<div><b>Kế hoạch kỳ tới:</b> ${esc(n.plan).replace(/\n/g, '<br>')}</div>` : ''}
           ${extraCols(cf.dailyNotes).filter((f) => n.custom?.[f.key]).map((f) => `<div><b>${esc(f.label)}:</b> ${esc(n.custom[f.key])}</div>`).join('')}
         </div>`).join('')
       : '<p style="color:#888;font-size:13px">Không có.</p>');
