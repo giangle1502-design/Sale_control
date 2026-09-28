@@ -49,7 +49,7 @@ function buildHeaders(rows, hr) {
 
 const toMs = (v) => (v?.toMillis ? v.toMillis() : Date.parse(v) || 0);
 
-export default function Receivables({ staffFilter, onCollect }) {
+export default function Receivables({ staffFilter, setStaffFilter, onCollect }) {
   const { email, isAdmin, staffName } = useApp();
   const [meta, setMeta] = useState(null);
   const [search, setSearch] = useState('');
@@ -95,9 +95,23 @@ export default function Receivables({ staffFilter, onCollect }) {
     all.forEach((x) => { x.remaining = Math.max(0, x.total - x.paid); });
     const s = norm(search);
     return all
-      .filter((x) => (!s || norm(x.name).includes(s) || norm(x.code).includes(s)) && (!onlyOverdue || x.overdue > 0))
+      .filter((x) => (!s || norm(x.name).includes(s) || norm(x.code).includes(s) || (isAdmin && norm(x.ownerEmail ? staffName(x.ownerEmail) : 'chua gan').includes(s)))
+        && (!onlyOverdue || x.overdue > 0))
       .sort((a, b) => b.total - a.total);
-  }, [data, search, onlyOverdue, asOf, newPays]);
+  }, [data, search, onlyOverdue, asOf, newPays, isAdmin, staffName]);
+
+  // Tổng hợp công nợ theo từng sale (dành cho quản trị)
+  const bySale = useMemo(() => {
+    const g = new Map();
+    groups.forEach((x) => {
+      const k = x.ownerEmail || '';
+      if (!g.has(k)) g.set(k, { email: k, customers: 0, total: 0, paid: 0, remaining: 0, overdue: 0, overdueCust: 0 });
+      const r = g.get(k);
+      r.customers += 1; r.total += x.total; r.paid += x.paid; r.remaining += x.remaining; r.overdue += x.overdue;
+      if (x.overdue > 0) r.overdueCust += 1;
+    });
+    return [...g.values()].sort((a, b) => b.remaining - a.remaining);
+  }, [groups]);
 
   const tot = {
     total: groups.reduce((s, x) => s + x.total, 0),
@@ -121,7 +135,7 @@ export default function Receivables({ staffFilter, onCollect }) {
   return (
     <>
       <div className="filters">
-        <input placeholder="Tìm khách hàng / mã KH…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input placeholder={isAdmin ? 'Tìm khách hàng / mã KH / tên sale…' : 'Tìm khách hàng / mã KH…'} value={search} onChange={(e) => setSearch(e.target.value)} />
         <label className="nowrap"><input type="checkbox" checked={onlyOverdue} onChange={(e) => setOnlyOverdue(e.target.checked)} /> Chỉ khách quá hạn</label>
         <span className="small">
           {batchId ? <>Số liệu kế toán đến ngày <b>{fmtDate(asOf)}</b> · file "{(meta || m)?.fileName}"</> : 'Chưa nhập số liệu công nợ từ kế toán.'}
@@ -138,6 +152,41 @@ export default function Receivables({ staffFilter, onCollect }) {
         {isAdmin && <Stat label="Khách chưa gán NV" value={tot.unassigned} sub="Thêm Mã KH / tên khớp ở mục Khách hàng rồi nhập lại" />}
       </div>
       <ErrorBox error={error} />
+      {isAdmin && batchId && (
+        <>
+          <div className="section-title">
+            Công nợ theo nhân viên sale
+            {staffFilter && setStaffFilter && <> · <a href="#" className="small" onClick={(e) => { e.preventDefault(); setStaffFilter(''); }}>Xem tất cả sale</a></>}
+          </div>
+          <div className="table-wrap" style={{ marginBottom: 14 }}>
+            {bySale.length === 0 ? <Empty /> : (
+              <table>
+                <thead><tr><th>Nhân viên</th><th className="num">Số KH còn nợ</th><th className="num">Tổng nợ</th><th className="num">Đã thu</th>
+                  <th className="num">Còn lại</th><th className="num">Quá hạn</th><th className="num">KH quá hạn</th><th></th></tr></thead>
+                <tbody>
+                  {bySale.map((r) => (
+                    <tr key={r.email} style={staffFilter === r.email ? { background: 'var(--primary-soft)' } : undefined}>
+                      <td><b>{r.email ? staffName(r.email) : <span className="badge red">Chưa gán NV</span>}</b></td>
+                      <td className="num">{r.customers}</td>
+                      <td className="num">{fmtMoney(r.total)}</td>
+                      <td className="num">{r.paid > 0 ? fmtMoney(r.paid) : '-'}</td>
+                      <td className="num"><b>{fmtMoney(r.remaining)}</b></td>
+                      <td className="num">{r.overdue > 0 ? <span className="badge red">{fmtMoney(r.overdue)}</span> : '-'}</td>
+                      <td className="num">{r.overdueCust || '-'}</td>
+                      <td className="nowrap">
+                        {r.email && setStaffFilter && staffFilter !== r.email && (
+                          <button className="btn sm" onClick={() => setStaffFilter(r.email)}>Xem chi tiết ›</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <div className="section-title">Chi tiết theo khách hàng{staffFilter ? ' – ' + staffName(staffFilter) : ''}</div>
+        </>
+      )}
       <div className="table-wrap">
         {groups.length === 0 ? <Empty text={batchId ? 'Không có công nợ' : 'Quản trị bấm "Nhập công nợ từ Excel kế toán" để tải danh sách'} /> : (
           <table>
