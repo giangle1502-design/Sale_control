@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 
 const NAV = [
   ['/', '📊', 'Tổng quan'],
-  ['/nhat-ky', '📝', 'Nhật ký ngày'],
+  ['/nhat-ky', '📝', 'Báo cáo tuần/tháng'],
   ['/hoat-dong', '📞', 'Hoạt động KH'],
   ['/bao-gia', '📄', 'Báo giá'],
   ['/don-hang', '📦', 'Đơn hàng'],
