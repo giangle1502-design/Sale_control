@@ -149,7 +149,7 @@ export default function Dashboard() {
             <tbody>
               {rep.staff.map((s) => (
                 <tr key={s.email}>
-                  <td><b>{s.name}</b></td>
+                  <td><b>{s.name}</b>{s.orphan && <div><span className="badge red" title="Email này không còn trong mục Nhân viên. Vào Nhân viên → 🔁 Chuyển dữ liệu để chuyển sang email mới">Email cũ – cần chuyển dữ liệu</span></div>}</td>
                   <td className="num">{s.activities}</td>
                   <td className="small">{Object.entries(s.byType).map(([k, v]) => `${k}: ${v}`).join(' · ')}</td>
                   <td className="num">{s.newCustomers}</td>
