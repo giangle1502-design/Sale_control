@@ -3,7 +3,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { DEFAULT_CONFIG, useApp } from '../context/AppContext';
 import { slugKey, today } from '../lib/utils';
-import { Field } from '../components/ui';
+import { BUILTIN_FIELDS, BUILTIN_TYPES, builtinType, Field } from '../components/ui';
 import { formatCode } from '../lib/codes';
 
 const MODULES = [
@@ -132,7 +132,11 @@ export default function Settings() {
               {fieldsOf.map((f, i) => (
                 <tr key={f.key}>
                   <td><input value={f.label} onChange={(e) => setFields(fieldsOf.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} /></td>
-                  <td>{TYPES.find((t) => t[0] === f.type)?.[1]}</td>
+                  <td>
+                    <select value={f.type} onChange={(e) => setFields(fieldsOf.map((x, j) => (j === i ? { ...x, type: e.target.value, options: e.target.value === 'select' ? (x.options || []) : x.options } : x)))}>
+                      {TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                    </select>
+                  </td>
                   <td>{f.type === 'select' && (
                     <input value={(f.options || []).join(', ')}
                       onChange={(e) => setFields(fieldsOf.map((x, j) => (j === i ? { ...x, options: e.target.value.split(',').map((s) => s.trim()) } : x)))} />
@@ -155,6 +159,30 @@ export default function Settings() {
             </tbody>
           </table>
         </div>
+        {BUILTIN_FIELDS[mod] && (
+          <>
+            <div className="section-title">Kiểu dữ liệu các trường có sẵn</div>
+            <p className="small">Đổi kiểu bất cứ lúc nào, dữ liệu đã nhập vẫn giữ. VD: Sản lượng để <b>Đoạn văn</b> để ghi theo mã hàng "5502: 50 tấn, 7000F: 200 tấn".</p>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Trường</th><th>Kiểu</th></tr></thead>
+                <tbody>
+                  {BUILTIN_FIELDS[mod].map(([key, label]) => (
+                    <tr key={key}>
+                      <td>{label}</td>
+                      <td>
+                        <select value={builtinType(c, mod, key)}
+                          onChange={(e) => setC({ ...c, builtinTypes: { ...(c.builtinTypes || {}), [mod]: { ...(c.builtinTypes?.[mod] || {}), [key]: e.target.value } } })}>
+                          {BUILTIN_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="card">
