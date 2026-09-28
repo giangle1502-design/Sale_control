@@ -11,7 +11,7 @@ import { useCustomers } from '../components/CustomerPicker';
 import AddFieldButton from '../components/AddFieldButton';
 import { ActivityForm } from './Activities';
 import { isAutoCode, reserveCodes } from '../lib/codes';
-import { confirmDelete, CustomFieldInputs, customValue, Empty, ErrorBox, Field, Modal, Stat } from '../components/ui';
+import { BuiltinInput, builtinType, confirmDelete, CustomFieldInputs, customValue, Empty, ErrorBox, Field, Modal, Stat } from '../components/ui';
 
 const STAGES = ['Tiềm năng', 'Đang chăm sóc', 'Đang giao dịch', 'Ngừng giao dịch'];
 const TONE = { 'Tiềm năng': 'amber', 'Đang chăm sóc': 'blue', 'Đang giao dịch': 'green', 'Ngừng giao dịch': 'red' };
@@ -37,7 +37,7 @@ const COLS = [
   ['source', 'Nguồn', ['nguon', 'nguon khach']],
   ['stage', 'Giai đoạn', ['giai doan']],
   ['productsUsed', 'Loại hạt đang dùng', ['loai hat dang dung', 'san pham dang dung', 'loai hat']],
-  ['monthlyVolume', 'Sản lượng/tháng (tấn)', ['san luong thang', 'san luong']],
+  ['monthlyVolume', 'Sản lượng', ['san luong thang tan', 'san luong thang', 'san luong']],
   ['note', 'Ghi chú', ['ghi chu', 'note']],
 ];
 
@@ -180,7 +180,7 @@ export default function Customers() {
       'ID hệ thống': c.id, 'Email NV phụ trách': c.ownerEmail, 'Tên NV phụ trách': staffName(c.ownerEmail),
       'Mã KH': c.code || '', 'Tên KH': c.name, 'Loại KH (Khách cũ/Khách mới)': c.customerType || 'Khách mới',
       'Người liên hệ': c.contact, SĐT: c.phone, 'Email KH': c.email, 'Địa chỉ': c.address, MST: c.taxCode,
-      Nguồn: c.source, 'Giai đoạn': c.stage, 'Loại hạt đang dùng': c.productsUsed, 'Sản lượng/tháng (tấn)': c.monthlyVolume,
+      Nguồn: c.source, 'Giai đoạn': c.stage, 'Loại hạt đang dùng': c.productsUsed, 'Sản lượng': c.monthlyVolume,
       'Ghi chú': c.note, 'Ngày tạo': fmtDate(c.createdDate),
       ...Object.fromEntries(fields.map((f) => [f.label, customValue(f, c.custom?.[f.key])])),
       'Số lần liên hệ': inf(c).count,
@@ -272,7 +272,7 @@ export default function Customers() {
                   <td><span className={'badge ' + (TONE[c.stage] || '')}>{c.stage || '-'}</span></td>
                   <td><ContactCell info={inf(c)} onHistory={() => setHistory(c)} /></td>
                   <td><NextCell info={inf(c)} /></td>
-                  <td>{c.productsUsed}{c.monthlyVolume && <div className="small">{c.monthlyVolume} tấn/tháng</div>}</td>
+                  <td>{c.productsUsed}{c.monthlyVolume !== '' && c.monthlyVolume != null && <div className="small" style={{ whiteSpace: 'pre-line' }}>{typeof c.monthlyVolume === 'number' ? c.monthlyVolume + ' tấn/tháng' : c.monthlyVolume}</div>}</td>
                   {isAdmin && <td>{staffName(c.ownerEmail)}</td>}
                   {fields.map((f) => <td key={f.key}>{String(customValue(f, c.custom?.[f.key]))}</td>)}
                   <td className="nowrap">
@@ -366,15 +366,17 @@ function CustomerForm({ initial, onClose }) {
           <Field label="Số điện thoại"><input value={f.phone} onChange={set('phone')} /></Field>
           <Field label="Email"><input type="email" value={f.email} onChange={set('email')} /></Field>
           <Field label="Mã số thuế"><input value={f.taxCode} onChange={set('taxCode')} /></Field>
-          <Field label="Địa chỉ" full><input value={f.address} onChange={set('address')} /></Field>
+          <Field label="Địa chỉ" full><BuiltinInput type={builtinType(config, 'customers', 'address')} value={f.address} onChange={set('address')} /></Field>
           <Field label="Nguồn khách">
             <select value={f.source} onChange={set('source')}><option value="">--</option>{config.customerSources.map((x) => <option key={x}>{x}</option>)}</select>
           </Field>
           <Field label="Giai đoạn">
             <select value={f.stage} onChange={set('stage')}>{STAGES.map((x) => <option key={x}>{x}</option>)}</select>
           </Field>
-          <Field label="Loại hạt đang dùng"><input value={f.productsUsed} onChange={set('productsUsed')} placeholder="VD: PP, HDPE" /></Field>
-          <Field label="Sản lượng ước tính (tấn/tháng)"><input type="number" step="any" value={f.monthlyVolume} onChange={set('monthlyVolume')} /></Field>
+          <Field label="Loại hạt đang dùng" full={builtinType(config, 'customers', 'productsUsed') === 'textarea'}><BuiltinInput type={builtinType(config, 'customers', 'productsUsed')} value={f.productsUsed} onChange={set('productsUsed')} placeholder="VD: PP, HDPE" /></Field>
+          <Field label={builtinType(config, 'customers', 'monthlyVolume') === 'number' ? 'Sản lượng ước tính (tấn/tháng)' : 'Sản lượng (theo mã hàng)'} full={builtinType(config, 'customers', 'monthlyVolume') === 'textarea'}>
+            <BuiltinInput type={builtinType(config, 'customers', 'monthlyVolume')} value={f.monthlyVolume} onChange={set('monthlyVolume')} placeholder="VD: 5502: 50 tấn, 7000F: 200 tấn" />
+          </Field>
           {isAdmin && (
             <Field label="Nhân viên phụ trách">
               <select value={f.ownerEmail || profile.email} onChange={set('ownerEmail')}>
@@ -383,7 +385,7 @@ function CustomerForm({ initial, onClose }) {
               </select>
             </Field>
           )}
-          <Field label="Ghi chú" full><textarea rows={2} value={f.note} onChange={set('note')} /></Field>
+          <Field label="Ghi chú" full><BuiltinInput type={builtinType(config, 'customers', 'note')} value={f.note} onChange={set('note')} /></Field>
           <CustomFieldInputs fields={fields} value={f.custom} onChange={(custom) => setF({ ...f, custom })} />
         </div>
         <div style={{ marginTop: 10 }}><AddFieldButton module="customers" label="+ Thêm trường cho khách hàng" /></div>
@@ -448,7 +450,7 @@ function ImportCustomers({ existing, onClose }) {
           if (['id', 'ownerEmail', 'ownerName'].includes(k) || map[k] === undefined) return;
           const v = get(k);
           if (k === 'customerType') data[k] = toType(v, found?.customerType || 'Khách mới');
-          else if (k === 'monthlyVolume') { if (v !== '') data[k] = toNumber(v); }
+          else if (k === 'monthlyVolume') { if (v !== '') data[k] = builtinType(config, 'customers', 'monthlyVolume') === 'number' ? toNumber(v) : v; }
           else if (v !== '' || !found) data[k] = v;
         });
         if (!found && !data.customerType) data.customerType = 'Khách mới';
