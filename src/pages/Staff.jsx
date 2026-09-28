@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext';
 import { confirmDelete, Empty, Field, Modal } from '../components/ui';
 
 const MAIN = [['customers', 'Khách hàng'], ['receivables', 'Công nợ (kế toán)']];
-const HISTORY = [['activities', 'Hoạt động'], ['quotes', 'Báo giá'], ['orders', 'Đơn hàng'], ['payments', 'Thu tiền'], ['tasks', 'Việc được giao']];
+const HISTORY = [['activities', 'Hoạt động'], ['quotes', 'Báo giá'], ['orders', 'Đơn hàng'], ['payments', 'Thu tiền'], ['tasks', 'Việc được giao'], ['dailyNotes', 'Báo cáo tuần/tháng']];
 
 const blank = { email: '', name: '', phone: '', role: 'sale', active: true };
 
@@ -108,19 +108,21 @@ function TransferData({ onClose }) {
     setErr('');
     try {
       const m = {};
-      for (const [c] of MAIN) {
+      for (const [c] of [...MAIN, ...HISTORY]) {
         const snap = await getDocs(collection(db, c));
         snap.forEach((d) => {
           const e = d.data().ownerEmail || '';
           if (!e) return;
-          m[e] = m[e] || { customers: 0, receivables: 0 };
-          m[e][c] += 1;
+          m[e] = m[e] || { customers: 0, receivables: 0, history: 0 };
+          if (c === 'customers' || c === 'receivables') m[e][c] += 1; else m[e].history += 1;
         });
       }
       setOwners(m);
     } catch (e) { setErr(e.message); }
   };
   useEffect(() => { load(); }, []);
+  // Email không còn trong danh sách NV → mặc định chuyển cả lịch sử
+  useEffect(() => { if (from) setWithHistory(!known.has(from)); }, [from]);
 
   const run = async () => {
     if (!from || !to || from === to) return;
@@ -145,7 +147,7 @@ function TransferData({ onClose }) {
     setBusy(false);
   };
 
-  const rows = owners ? Object.entries(owners).sort((a, b) => (known.has(a[0]) - known.has(b[0])) || b[1].customers - a[1].customers) : [];
+  const rows = owners ? Object.entries(owners).sort((a, b) => (known.has(a[0]) - known.has(b[0])) || b[1].customers - a[1].customers || b[1].history - a[1].history) : [];
   return (
     <Modal title="Chuyển dữ liệu giữa nhân viên" onClose={onClose} wide>
       <p className="small">
@@ -156,7 +158,7 @@ function TransferData({ onClose }) {
       <div className="table-wrap" style={{ maxHeight: 260, overflow: 'auto' }}>
         {!owners ? <Empty text="Đang tải…" /> : rows.length === 0 ? <Empty /> : (
           <table>
-            <thead><tr><th>Email</th><th>Nhân viên</th><th className="num">Khách hàng</th><th className="num">Dòng công nợ</th><th></th></tr></thead>
+            <thead><tr><th>Email</th><th>Nhân viên</th><th className="num">Khách hàng</th><th className="num">Dòng công nợ</th><th className="num">Hoạt động, báo giá, đơn, việc, báo cáo</th><th></th></tr></thead>
             <tbody>
               {rows.map(([e, c]) => (
                 <tr key={e} style={from === e ? { background: 'var(--primary-soft)' } : undefined}>
@@ -164,6 +166,7 @@ function TransferData({ onClose }) {
                   <td>{known.has(e) ? nameOf(e) : <span className="badge red">Không có trong danh sách NV</span>}</td>
                   <td className="num">{c.customers}</td>
                   <td className="num">{c.receivables}</td>
+                  <td className="num">{c.history}</td>
                   <td><button type="button" className="btn sm" onClick={() => setFrom(e)}>Chọn</button></td>
                 </tr>
               ))}
