@@ -55,7 +55,7 @@ export default async function handler(req, res) {
 
     const byDate = (c, field = 'date') => list(db.collection(c).where(field, '==', date));
     const [activities, quotes, orders, payments, notes, customers, tasks, staffList] = await Promise.all([
-      byDate('activities'), byDate('quotes'), byDate('orders'), byDate('payments'), byDate('dailyNotes'),
+      byDate('activities'), byDate('quotes'), byDate('orders'), byDate('payments'), byDate('dailyNotes', 'submittedDate'),
       byDate('customers', 'createdDate'), list(db.collection('tasks')),
       (await db.collection('staff').get()).docs.map((d) => ({ email: d.id, ...d.data() })),
     ]);
