@@ -10,7 +10,8 @@ import { cellText, detectHeaderRow, guessMapping, readWorkbook, sheetRows, toNum
 import { useCustomers } from '../components/CustomerPicker';
 import AddFieldButton from '../components/AddFieldButton';
 import { ActivityForm } from './Activities';
-import ProductMultiPicker from '../components/ProductMultiPicker';
+import ProductMultiPicker, { splitCodes } from '../components/ProductMultiPicker';
+import { useProducts } from './Products';
 import { isAutoCode, reserveCodes } from '../lib/codes';
 import { BuiltinInput, builtinType, confirmDelete, CustomFieldInputs, customValue, Empty, ErrorBox, Field, Modal, Stat } from '../components/ui';
 
@@ -132,6 +133,8 @@ export default function Customers() {
   const [history, setHistory] = useState(null);
   const [contactF, setContactF] = useState('');
   const [sortBy, setSortBy] = useState('name');
+  const [prod, setProd] = useState(''); // lọc theo mã hàng đang dùng
+  const products = useProducts().data;
   const fields = config.customFields.customers || [];
   const { data, error } = useCustomers(staff);
   const acts = useQuery(() => scopedQuery('activities', { me: email, isAdmin, staffFilter: staff }), [email, isAdmin, staff]);
@@ -150,6 +153,16 @@ export default function Customers() {
     }
   };
   const s = norm(search);
+  const p = norm(prod);
+  // Khách đang dùng mã hàng: khớp trong "Loại hạt đang dùng" hoặc ghi chú "Sản lượng" (VD: 5502: 50 tấn)
+  const usesProd = (c) => splitCodes(c.productsUsed).some((x) => norm(x).includes(p)) || norm(c.monthlyVolume).includes(p);
+  // Gợi ý mã hàng: danh mục Mặt hàng + các mã sale đã nhập ở khách
+  const prodOptions = useMemo(() => {
+    const m = new Map();
+    products.forEach((x) => x.code && m.set(norm(x.code), [String(x.code), x.name || '']));
+    data.forEach((c) => splitCodes(c.productsUsed).forEach((x) => { if (!m.has(norm(x))) m.set(norm(x), [x, '']); }));
+    return [...m.values()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [products, data]);
   const sorters = {
     name: (a, b) => (a.name || '').localeCompare(b.name || ''),
     stale: (a, b) => (inf(b).count ? inf(b).days : 1e9) - (inf(a).count ? inf(a).days : 1e9),
@@ -158,7 +171,8 @@ export default function Customers() {
   };
   const rows = data
     .filter((c) => (!stage || c.stage === stage) && (!ctype || (c.customerType || 'Khách mới') === ctype) && matchContact(c)
-      && (!s || [c.name, c.code, c.contact, c.phone, c.taxCode].some((v) => norm(v).includes(s))))
+      && (!p || usesProd(c))
+      && (!s || [c.name, c.code, c.contact, c.phone, c.taxCode, c.productsUsed].some((v) => norm(v).includes(s))))
     .sort(sorters[sortBy] || sorters.name);
   const cnt = useMemo(() => {
     const all = [...info.values()];
@@ -235,7 +249,13 @@ export default function Customers() {
         <Stat label="Đã liên hệ trong 7 ngày" value={cnt.week} tone="green" onClick={() => toggle('week')} active={contactF === 'week'} />
       </div>
       <div className="filters">
-        <input placeholder="Tìm tên, mã KH, SĐT, MST…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input placeholder="Tìm tên, mã KH, SĐT, MST, mã hàng…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <span className="nowrap" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <input list="cust-prod-list" placeholder="🔎 Lọc theo mã hàng (VD: 5502)" value={prod} onChange={(e) => setProd(e.target.value)}
+            style={{ width: 210, ...(prod ? { borderColor: 'var(--primary)', background: 'var(--primary-soft)' } : {}) }} />
+          {prod && <button className="btn sm" onClick={() => setProd('')} title="Bỏ lọc mã hàng">✕</button>}
+          <datalist id="cust-prod-list">{prodOptions.map(([code, name]) => <option key={code} value={code}>{name}</option>)}</datalist>
+        </span>
         <select value={ctype} onChange={(e) => setCtype(e.target.value)}>
           <option value="">Khách cũ + mới</option>{CUSTOMER_TYPES.map((x) => <option key={x}>{x}</option>)}
         </select>
@@ -256,6 +276,7 @@ export default function Customers() {
         )}
       </div>
       <ErrorBox error={error || acts.error} />
+      {prod && <div className="ok-box" style={{ marginBottom: 10 }}>Có <b>{rows.length}</b> khách hàng đang dùng mã <b>{prod}</b>{prodOptions.find(([c]) => norm(c) === p)?.[1] ? ` (${prodOptions.find(([c]) => norm(c) === p)[1]})` : ''}.</div>}
       <div className="table-wrap">
         {rows.length === 0 ? <Empty /> : (
           <table>
