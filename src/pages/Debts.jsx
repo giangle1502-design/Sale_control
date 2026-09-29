@@ -94,7 +94,7 @@ function DebtsMain() {
       'Đã thu': Math.round(d.paid), 'Còn nợ': Math.round(d.balance), 'Quá hạn': Math.round(d.overdue),
     })),
     'Phiếu thu': pays.map((p) => ({
-      Ngày: fmtDate(p.date), 'Nhân viên': staffName(p.ownerEmail), 'Khách hàng': p.customerName, 'Số tiền': num(p.amount),
+      Ngày: fmtDate(p.date), 'Nhân viên': staffName(p.ownerEmail), 'Khách hàng': p.customerName, 'Pháp nhân': p.entity || '', 'Số tiền': num(p.amount),
       'Hình thức': p.method, 'Số ĐH': p.orderNo, 'Ghi chú': p.note,
       ...Object.fromEntries(fields.map((f) => [f.label, customValue(f, p.custom?.[f.key])])),
     })),
@@ -164,7 +164,7 @@ function DebtsMain() {
                   <tr key={p.id}>
                     <td className="nowrap">{fmtDate(p.date)}</td>
                     {isAdmin && <td>{staffName(p.ownerEmail)}</td>}
-                    <td>{p.customerName}</td>
+                    <td>{p.customerName}{p.entity && <> <span className={'badge ' + (p.entity === 'PLA' ? 'amber' : 'blue')}>{p.entity}</span></>}</td>
                     <td className="num">{fmtMoney(p.amount)}</td>
                     <td>{p.method}</td><td>{p.orderNo}</td><td>{p.note}</td>
                     {fields.map((f) => <td key={f.key}>{String(customValue(f, p.custom?.[f.key]))}</td>)}
