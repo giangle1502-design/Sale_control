@@ -46,6 +46,8 @@ export function AppProvider({ children }) {
 
   const allowed = !!user && (isSuper || (staffDoc && staffDoc.active !== false));
   const isAdmin = !!user && (isSuper || (staffDoc?.role === 'admin' && staffDoc?.active !== false));
+  // Kế toán: chỉ xem & nhập công nợ
+  const isAccountant = !!user && !isAdmin && staffDoc?.role === 'accountant' && staffDoc?.active !== false;
 
   useEffect(() => {
     if (!allowed) return;
@@ -71,13 +73,13 @@ export function AppProvider({ children }) {
     () => ({
       email,
       name: staffDoc?.name || user?.displayName || email,
-      role: isAdmin ? 'admin' : 'sale',
+      role: isAdmin ? 'admin' : isAccountant ? 'accountant' : 'sale',
     }),
-    [email, staffDoc, user, isAdmin]
+    [email, staffDoc, user, isAdmin, isAccountant]
   );
 
   const value = {
-    user, email, profile, isAdmin, allowed, config, staffList,
+    user, email, profile, isAdmin, isAccountant, allowed, config, staffList,
     loading: user === undefined || (!!user && staffDoc === undefined && !isSuper),
     staffName: (e) => staffList.find((s) => s.email === e)?.name || (e === email ? profile.name : e),
     logout: () => signOut(auth),
