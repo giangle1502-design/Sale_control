@@ -90,6 +90,11 @@ service cloud.firestore {
       allow write: if isAdmin() || isAccountant();
     }
 
+    // Bản chụp công nợ theo ngày (phân tích tuần): chỉ quản trị & kế toán
+    match /receivableSnapshots/{id} {
+      allow read, write: if isAdmin() || isAccountant();
+    }
+
     // Nhật ký gửi email: chỉ server ghi (Admin SDK bỏ qua rules), admin xem
     match /reportLogs/{id} {
       allow read: if isAdmin();
