@@ -103,7 +103,8 @@ export function parseAging(rows) {
 }
 
 export default function Receivables({ staffFilter, setStaffFilter, onCollect }) {
-  const { email, isAdmin, staffName, staffList } = useApp();
+  const { email, isAdmin, isAccountant, staffName, staffList } = useApp();
+  const seeAll = isAdmin || isAccountant; // quản trị & kế toán xem mọi sale
   const [meta, setMeta] = useState(null);
   const [search, setSearch] = useState('');
   const [onlyOverdue, setOnlyOverdue] = useState(false);
@@ -117,7 +118,7 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
   const asOf = info?.asOf || today();
   const buckets = info?.buckets || DEFAULT_BUCKETS;
   const lastIdx = buckets.length - 1;
-  const owner = isAdmin ? staffFilter : email;
+  const owner = seeAll ? staffFilter : email;
   const { data, error } = useQuery(
     () => (batchId ? query(collection(db, 'receivables'), where('batchId', '==', batchId), ...(owner ? [where('ownerEmail', '==', owner)] : [])) : null),
     [batchId, owner]
@@ -125,7 +126,7 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
 
   // Gán sale theo nhóm khách hàng trong file (khi admin thêm nhân viên mới có đúng tên nhóm → tự gán)
   useEffect(() => {
-    if (!isAdmin || owner || !data.length || !staffList.length) return;
+    if (!seeAll || owner || !data.length || !staffList.length) return;
     const todo = [];
     data.forEach((r) => {
       if (!r.saleGroup) return;
@@ -143,13 +144,13 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
         setSyncMsg(`Đã gán sale cho ${todo.length} khách hàng theo nhóm trong file kế toán.`);
       } catch (e) { setSyncMsg('Không gán được sale: ' + e.message); }
     })();
-  }, [isAdmin, owner, data, staffList]);
+  }, [seeAll, owner, data, staffList]);
 
   // Phiếu thu ghi trên app SAU lần nhập số liệu kế toán → trừ vào công nợ còn lại
   const importedAt = toMs(info?.importedAt);
   const paysQ = useQuery(
-    () => (batchId ? scopedQuery('payments', { me: email, isAdmin, staffFilter, from: asOf }) : null),
-    [batchId, email, isAdmin, staffFilter, asOf]
+    () => (batchId ? scopedQuery('payments', { me: email, isAdmin: seeAll, staffFilter, from: asOf }) : null),
+    [batchId, email, seeAll, staffFilter, asOf]
   );
   const newPays = useMemo(() => paysQ.data.filter((p) => !importedAt || toMs(p.createdAt) > importedAt), [paysQ.data, importedAt]);
 
@@ -232,7 +233,7 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
   return (
     <>
       <div className="filters">
-        <input placeholder={isAdmin ? 'Tìm khách hàng / mã KH / tên sale…' : 'Tìm khách hàng / mã KH…'} value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input placeholder={seeAll ? 'Tìm khách hàng / mã KH / tên sale…' : 'Tìm khách hàng / mã KH…'} value={search} onChange={(e) => setSearch(e.target.value)} />
         <label className="nowrap"><input type="checkbox" checked={onlyOverdue} onChange={(e) => setOnlyOverdue(e.target.checked)} /> Chỉ khách quá hạn</label>
         <label className="nowrap"><input type="checkbox" checked={only30} onChange={(e) => setOnly30(e.target.checked)} /> Chỉ nợ {buckets[lastIdx]?.toLowerCase()}</label>
         <span className="small">
@@ -240,7 +241,7 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
         </span>
         <div className="actions" style={{ marginLeft: 'auto' }}>
           <button className="btn" onClick={doExport} disabled={!custs.length}>⬇ Excel</button>
-          {isAdmin && <button className="btn primary" onClick={() => setImporting(true)}>⬆ Nhập công nợ (MISA tuổi nợ)</button>}
+          {seeAll && <button className="btn primary" onClick={() => setImporting(true)}>⬆ Nhập công nợ (MISA tuổi nợ)</button>}
         </div>
       </div>
       <div className="stats">
@@ -252,7 +253,7 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
       <ErrorBox error={error} />
       {syncMsg && <div className="ok-box" style={{ marginBottom: 10 }}>{syncMsg}</div>}
 
-      {isAdmin && batchId && (
+      {seeAll && batchId && (
         <>
           <div className="section-title">
             Công nợ theo nhân viên sale
@@ -287,13 +288,13 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
       <div className="table-wrap">
         {custs.length === 0 ? <Empty text={batchId ? 'Không có công nợ' : 'Quản trị bấm "Nhập công nợ (MISA tuổi nợ)" để tải danh sách'} /> : (
           <table>
-            <thead><tr><th>Mã KH</th><th>Khách hàng</th>{isAdmin && <th>NV phụ trách</th>}<AgingHead /><th></th></tr></thead>
+            <thead><tr><th>Mã KH</th><th>Khách hàng</th>{seeAll && <th>NV phụ trách</th>}<AgingHead /><th></th></tr></thead>
             <tbody>
               {custs.map((x) => (
                 <tr key={x.id}>
                   <td className="nowrap">{x.customerCode}</td>
                   <td><b>{x.customerName}</b>{x.address && <div className="small">{x.address}</div>}</td>
-                  {isAdmin && <td>{x.ownerEmail ? staffName(x.ownerEmail) : <span className="badge red">{saleLabel(x)}</span>}</td>}
+                  {seeAll && <td>{x.ownerEmail ? staffName(x.ownerEmail) : <span className="badge red">{saleLabel(x)}</span>}</td>}
                   <AgingCells x={x} bold />
                   <td className="nowrap">
                     {onCollect && (isAdmin || x.ownerEmail === email) && x.remaining > 0 && (
@@ -303,7 +304,7 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
                 </tr>
               ))}
             </tbody>
-            <tfoot><tr><td></td><td>Tổng ({tot.count} KH)</td>{isAdmin && <td></td>}<AgingCells x={tot} bold /><td></td></tr></tfoot>
+            <tfoot><tr><td></td><td>Tổng ({tot.count} KH)</td>{seeAll && <td></td>}<AgingCells x={tot} bold /><td></td></tr></tfoot>
           </table>
         )}
       </div>
