@@ -10,6 +10,7 @@ import { cellText, detectHeaderRow, guessMapping, readWorkbook, sheetRows, toNum
 import { useCustomers } from '../components/CustomerPicker';
 import AddFieldButton from '../components/AddFieldButton';
 import { ActivityForm } from './Activities';
+import ProductMultiPicker from '../components/ProductMultiPicker';
 import { isAutoCode, reserveCodes } from '../lib/codes';
 import { BuiltinInput, builtinType, confirmDelete, CustomFieldInputs, customValue, Empty, ErrorBox, Field, Modal, Stat } from '../components/ui';
 
@@ -373,7 +374,7 @@ function CustomerForm({ initial, onClose }) {
           <Field label="Giai đoạn">
             <select value={f.stage} onChange={set('stage')}>{STAGES.map((x) => <option key={x}>{x}</option>)}</select>
           </Field>
-          <Field label="Loại hạt đang dùng" full={builtinType(config, 'customers', 'productsUsed') === 'textarea'}><BuiltinInput type={builtinType(config, 'customers', 'productsUsed')} value={f.productsUsed} onChange={set('productsUsed')} placeholder="VD: PP, HDPE" /></Field>
+          <Field label="Loại hạt đang dùng (chọn nhiều mã hàng)" full><ProductMultiPicker value={f.productsUsed} onChange={(v) => setF((x) => ({ ...x, productsUsed: v }))} /></Field>
           <Field label={builtinType(config, 'customers', 'monthlyVolume') === 'number' ? 'Sản lượng ước tính (tấn/tháng)' : 'Sản lượng (theo mã hàng)'} full={builtinType(config, 'customers', 'monthlyVolume') === 'textarea'}>
             <BuiltinInput type={builtinType(config, 'customers', 'monthlyVolume')} value={f.monthlyVolume} onChange={set('monthlyVolume')} placeholder="VD: 5502: 50 tấn, 7000F: 200 tấn" />
           </Field>
