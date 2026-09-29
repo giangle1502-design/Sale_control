@@ -17,7 +17,7 @@ export function buildReport({ activities = [], quotes = [], orders = [], payment
     }
     return rows.get(email);
   };
-  staffList.filter((s) => s.active !== false && s.role !== 'admin').forEach((s) => row(s.email, s.name));
+  staffList.filter((s) => s.active !== false && s.role !== 'admin' && s.role !== 'accountant').forEach((s) => row(s.email, s.name));
 
   activities.filter((a) => inRange(a.date)).forEach((a) => {
     const r = row(a.ownerEmail, a.ownerName);
