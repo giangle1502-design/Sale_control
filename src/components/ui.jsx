@@ -144,7 +144,6 @@ export function confirmDelete(msg = 'Xóa bản ghi này?') {
 export const BUILTIN_FIELDS = {
   customers: [
     ['monthlyVolume', 'Sản lượng', 'textarea', 'VD: 5502: 50 tấn, 7000F: 200 tấn'],
-    ['productsUsed', 'Loại hạt đang dùng', 'text', 'VD: PP, HDPE'],
     ['address', 'Địa chỉ', 'text', ''],
     ['note', 'Ghi chú', 'textarea', ''],
   ],
