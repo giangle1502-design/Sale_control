@@ -19,14 +19,35 @@ const DEFAULT_BUCKETS = ['1-3 ngày', '4-10 ngày', '11-15 ngày', '16-30 ngày'
 const toMs = (v) => (v?.toMillis ? v.toMillis() : Date.parse(v) || 0);
 const squash = (s) => norm(s).replace(/ /g, '');
 
-// Bản chụp công nợ (mỗi ngày số liệu 1 bản) để phân tích theo tuần
+// Pháp nhân: mỗi pháp nhân nhập 1 file tuổi nợ riêng
+export const ENTITIES = [['VAP', 'Việt An Pha'], ['PLA', 'PLA']];
+export const entityLabel = (e) => {
+  const n = ENTITIES.find((x) => x[0] === e)?.[1];
+  return !e ? '' : n && n !== e ? `${e} – ${n}` : e;
+};
+// Đọc meta theo pháp nhân từ settings/receivables (dữ liệu cũ chưa chia pháp nhân = VAP)
+export function entityMetas(m) {
+  const out = { ...(m?.entities || {}) };
+  if (m?.batchId && !out.VAP) out.VAP = { batchId: m.batchId, asOf: m.asOf, fileName: m.fileName, buckets: m.buckets, rowCount: m.rowCount, total: m.total, importedAt: m.importedAt, importedBy: m.importedBy, format: m.format };
+  return out;
+}
+// Tự nhận pháp nhân theo tên công ty ở đầu file
+export function detectEntity(company) {
+  const c = norm(company);
+  if (c.includes('viet an pha')) return 'VAP';
+  if (/\bpla\b/.test(c)) return 'PLA';
+  return '';
+}
+
+// Bản chụp công nợ (mỗi ngày số liệu 1 bản cho mỗi pháp nhân) để phân tích theo tuần
 export const snapRow = (r) => ({
   k: r.customerCode ? 'c:' + norm(r.customerCode) : 'n:' + norm(r.customerName),
   code: r.customerCode || '', name: r.customerName || '', group: r.saleGroup || '', owner: r.ownerEmail || '',
   amount: num(r.amount), overdue: num(r.overdue), notDue: num(r.notDue), aging: (r.aging || []).map(num),
 });
-export const saveSnapshot = (asOf, buckets, rows) => setDoc(doc(db, 'receivableSnapshots', asOf), {
-  asOf, buckets, rows: rows.map(snapRow), savedAt: serverTimestamp(),
+export const snapId = (entity, asOf) => `${entity}_${asOf}`;
+export const saveSnapshot = (entity, asOf, buckets, rows) => setDoc(doc(db, 'receivableSnapshots', snapId(entity, asOf)), {
+  entity, asOf, buckets, rows: rows.map(snapRow), savedAt: serverTimestamp(),
 });
 
 // Tìm nhân viên theo mã/tên nhóm khách hàng trong file kế toán (VD: DAUQUANGTHANG / ĐẬU QUANG THẮNG)
@@ -41,6 +62,7 @@ export function parseAging(rows) {
   const txt = (r, i) => cellText(r?.[i]);
   // Ngày số liệu: "Tài khoản: 131, Đến ngày 28/09/2026"
   let asOf = '';
+  const company = rows.slice(0, 3).map((r) => r.map(cellText).find((c) => /công ty|cong ty|company/i.test(c)) || '').find(Boolean) || '';
   rows.slice(0, 10).forEach((r) => r.forEach((c) => {
     const m = String(c || '').match(/đến ngày\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
     if (m && !asOf) asOf = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
@@ -106,7 +128,7 @@ export function parseAging(rows) {
   // Tổng cộng trong file để đối chiếu
   const totalRow = rows.find((r) => norm(r[0]).startsWith('tong cong'));
   return {
-    asOf, rows: out, groups: [...groups.values()],
+    asOf, company, rows: out, groups: [...groups.values()],
     buckets: buckets.length ? buckets.map((b) => b.label) : DEFAULT_BUCKETS,
     fileTotal: totalRow ? toNumber(totalRow[cTotal]) : null,
   };
@@ -121,17 +143,26 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
   const [only30, setOnly30] = useState(false);
   const [importing, setImporting] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
+  const [ent, setEnt] = useState(''); // 'VAP' | 'PLA' | 'ALL'
 
   const m = useDocSnap('receivables');
-  const info = meta || m;
-  const batchId = info?.batchId;
-  const asOf = info?.asOf || today();
-  const buckets = info?.buckets || DEFAULT_BUCKETS;
+  const metas = entityMetas(m || meta);
+  // Mặc định mở pháp nhân đầu tiên có số liệu
+  const curEnt = ent || ENTITIES.map((e) => e[0]).find((e) => metas[e]?.batchId) || ENTITIES[0][0];
+  const isAll = curEnt === 'ALL';
+  const shown = (isAll ? ENTITIES.map((e) => e[0]) : [curEnt]).filter((e) => metas[e]?.batchId);
+  const batchIds = shown.map((e) => metas[e].batchId);
+  const entOfBatch = Object.fromEntries(shown.map((e) => [metas[e].batchId, e]));
+  const info = shown.length === 1 ? metas[shown[0]] : null;
+  const batchKey = batchIds.join(',');
+  const batchId = batchIds[0];
+  const asOf = info?.asOf || shown.map((e) => metas[e].asOf).sort()[0] || today();
+  const buckets = metas[shown[0]]?.buckets || DEFAULT_BUCKETS;
   const lastIdx = buckets.length - 1;
   const owner = seeAll ? staffFilter : email;
   const { data, error } = useQuery(
-    () => (batchId ? query(collection(db, 'receivables'), where('batchId', '==', batchId), ...(owner ? [where('ownerEmail', '==', owner)] : [])) : null),
-    [batchId, owner]
+    () => (batchIds.length ? query(collection(db, 'receivables'), where('batchId', 'in', batchIds), ...(owner ? [where('ownerEmail', '==', owner)] : [])) : null),
+    [batchKey, owner]
   );
 
   // Gán sale theo nhóm khách hàng trong file (khi admin thêm nhân viên mới có đúng tên nhóm → tự gán)
@@ -158,19 +189,21 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
 
   // Lưu bản chụp cho số liệu hiện tại nếu chưa có (dữ liệu nhập trước khi có tính năng phân tích tuần)
   useEffect(() => {
-    if (!seeAll || owner || !batchId || !data.length || !info?.buckets) return;
-    getDoc(doc(db, 'receivableSnapshots', asOf))
-      .then((s) => { if (!s.exists()) return saveSnapshot(asOf, info.buckets, data); })
+    if (!seeAll || owner || isAll || !info?.buckets || !data.length || data.some((r) => r.batchId !== info.batchId)) return;
+    getDoc(doc(db, 'receivableSnapshots', snapId(curEnt, asOf)))
+      .then((s) => { if (!s.exists()) return saveSnapshot(curEnt, asOf, info.buckets, data); })
       .catch(() => {});
-  }, [seeAll, owner, batchId, data.length, asOf]);
+  }, [seeAll, owner, batchKey, data.length, asOf, curEnt]);
 
-  // Phiếu thu ghi trên app SAU lần nhập số liệu kế toán → trừ vào công nợ còn lại
-  const importedAt = toMs(info?.importedAt);
+  // Phiếu thu ghi trên app SAU lần nhập số liệu kế toán của pháp nhân đó → trừ vào công nợ còn lại
   const paysQ = useQuery(
     () => (batchId ? scopedQuery('payments', { me: email, isAdmin: seeAll, staffFilter, from: asOf }) : null),
-    [batchId, email, seeAll, staffFilter, asOf]
+    [batchKey, email, seeAll, staffFilter, asOf]
   );
-  const newPays = useMemo(() => paysQ.data.filter((p) => !importedAt || toMs(p.createdAt) > importedAt), [paysQ.data, importedAt]);
+  const newPays = useMemo(() => paysQ.data.filter((p) => {
+    const ok = (e) => { const mm = metas[e]; return mm && p.date >= mm.asOf && (!toMs(mm.importedAt) || toMs(p.createdAt) > toMs(mm.importedAt)); };
+    return p.entity ? shown.includes(p.entity) && ok(p.entity) : shown.some(ok);
+  }), [paysQ.data, batchKey, m, meta]);
 
   // Liên kết với danh sách Khách hàng (theo Mã KH / MST / tên) để ghi thu tiền đúng khách, không tạo khách trùng
   const custList = useCustomers(isAdmin ? '' : email).data;
@@ -185,10 +218,11 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
 
   const custs = useMemo(() => {
     const list = data.map((r) => ({
-      ...r, customerId: r.customerId || findCust(r)?.id || '', aging: buckets.map((_, i) => num(r.aging?.[i])), overdue: num(r.overdue), notDue: num(r.notDue ?? (r.amount - num(r.overdue))), paid: 0,
+      ...r, entity: entOfBatch[r.batchId] || r.entity || '', customerId: r.customerId || findCust(r)?.id || '', aging:buckets.map((_, i) => num(r.aging?.[i])), overdue: num(r.overdue), notDue: num(r.notDue ?? (r.amount - num(r.overdue))), paid: 0,
     }));
     newPays.forEach((p) => {
-      const x = list.find((y) => (p.customerId && y.customerId === p.customerId) || norm(y.customerName) === norm(p.customerName) || (y.customerCode && norm(y.customerCode) === norm(p.customerCode)));
+      const same = (y) => (p.customerId && y.customerId === p.customerId) || norm(y.customerName) === norm(p.customerName) || (y.customerCode && norm(y.customerCode) === norm(p.customerCode));
+      const x = list.find((y) => (!p.entity || y.entity === p.entity) && same(y));
       if (x) x.paid += num(p.amount);
     });
     list.forEach((x) => { x.remaining = Math.max(0, x.amount - x.paid); });
@@ -197,7 +231,7 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
       .filter((x) => (!s || norm(x.customerName).includes(s) || norm(x.customerCode).includes(s) || norm(saleLabel(x)).includes(s))
         && (!onlyOverdue || x.overdue > 0) && (!only30 || x.aging[lastIdx] > 0))
       .sort((a, b) => b.overdue - a.overdue || b.amount - a.amount);
-  }, [data, newPays, search, onlyOverdue, only30, buckets.length, staffList, findCust]);
+  }, [data, newPays, search, onlyOverdue, only30, buckets.length, staffList, findCust, batchKey]);
 
   const sumOf = (list) => list.reduce((t, x) => ({
     count: t.count + 1, amount: t.amount + x.amount, notDue: t.notDue + x.notDue, overdue: t.overdue + x.overdue,
@@ -221,10 +255,10 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
     ...Object.fromEntries(buckets.map((b, i) => ['Quá hạn ' + b, Math.round(x.aging[i])])),
     'Tổng quá hạn': Math.round(x.overdue), 'Đã thu trên app': Math.round(x.paid), 'Còn lại': Math.round(x.remaining),
   });
-  const doExport = () => exportSheets(`CongNo_TuoiNo_${asOf}`, {
+  const doExport = () => exportSheets(`CongNo_${isAll ? 'VAP_PLA' : curEnt}_${asOf}`, {
     'Theo sale': bySale.map((x) => ({ 'Nhân viên': saleLabel(x), 'Nhóm KH (kế toán)': x.saleGroup || '', 'Số KH': x.count, ...agingCols(x) })),
     'Theo khách hàng': custs.map((x) => ({
-      'Mã KH': x.customerCode, 'Khách hàng': x.customerName, 'Địa chỉ': x.address, 'Nhân viên': saleLabel(x), 'Nhóm KH (kế toán)': x.saleGroup || '', ...agingCols(x),
+      'Pháp nhân': x.entity, 'Mã KH': x.customerCode, 'Khách hàng': x.customerName, 'Địa chỉ': x.address, 'Nhân viên': saleLabel(x), 'Nhóm KH (kế toán)': x.saleGroup || '', ...agingCols(x),
     })),
   });
 
@@ -250,20 +284,30 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
 
   return (
     <>
+      <div className="presets" style={{ marginBottom: 10 }}>
+        {[...ENTITIES.map(([k]) => [k, entityLabel(k)]), ['ALL', 'Tổng 2 pháp nhân']].map(([k, l]) => (
+          <button key={k} className={'chip' + (curEnt === k ? ' on' : '')} onClick={() => setEnt(k)}
+            style={curEnt === k ? { fontWeight: 700 } : undefined}>
+            {k === 'ALL' ? '∑ ' : '🏢 '}{l}{k !== 'ALL' && !metas[k]?.batchId ? ' (chưa có số liệu)' : ''}
+          </button>
+        ))}
+      </div>
       <div className="filters">
         <input placeholder={seeAll ? 'Tìm khách hàng / mã KH / tên sale…' : 'Tìm khách hàng / mã KH…'} value={search} onChange={(e) => setSearch(e.target.value)} />
         <label className="nowrap"><input type="checkbox" checked={onlyOverdue} onChange={(e) => setOnlyOverdue(e.target.checked)} /> Chỉ khách quá hạn</label>
         <label className="nowrap"><input type="checkbox" checked={only30} onChange={(e) => setOnly30(e.target.checked)} /> Chỉ nợ {buckets[lastIdx]?.toLowerCase()}</label>
         <span className="small">
-          {batchId ? <>Số liệu kế toán đến ngày <b>{fmtDate(asOf)}</b> · file "{info?.fileName}"</> : 'Chưa nhập số liệu công nợ từ kế toán.'}
+          {!batchId ? `Chưa nhập số liệu công nợ ${isAll ? '' : curEnt + ' '}từ kế toán.`
+            : info ? <>Công nợ <b>{entityLabel(curEnt)}</b> đến ngày <b>{fmtDate(info.asOf)}</b> · file "{info.fileName}"</>
+              : <>Cộng 2 pháp nhân · {shown.map((e) => <span key={e}><b>{e}</b> đến {fmtDate(metas[e].asOf)} </span>)}</>}
         </span>
         <div className="actions" style={{ marginLeft: 'auto' }}>
           <button className="btn" onClick={doExport} disabled={!custs.length}>⬇ Excel</button>
-          {seeAll && <button className="btn primary" onClick={() => setImporting(true)}>⬆ Nhập công nợ (MISA tuổi nợ)</button>}
+          {seeAll && <button className="btn primary" onClick={() => setImporting(true)}>⬆ Nhập công nợ{isAll ? '' : ' ' + curEnt} (MISA tuổi nợ)</button>}
         </div>
       </div>
       <div className="stats">
-        <Stat label="Tổng phải thu" value={fmtMoney(tot.amount) + ' đ'} sub={`${tot.count} khách hàng`} tone="amber" />
+        <Stat label={'Tổng phải thu' + (isAll ? ' (VAP + PLA)' : ' ' + curEnt)} value={fmtMoney(tot.amount) + ' đ'} sub={`${tot.count} khách hàng`} tone="amber" />
         <Stat label="Quá hạn" value={fmtMoney(tot.overdue) + ' đ'} sub={`${tot.overdueCust} KH · ${tot.amount ? Math.round((tot.overdue / tot.amount) * 100) : 0}% tổng nợ`} tone="red" />
         <Stat label={'Quá hạn ' + (buckets[lastIdx] || '').toLowerCase()} value={fmtMoney(tot.aging[lastIdx] || 0) + ' đ'} tone="red" />
         <Stat label="Đã thu (ghi trên app sau ngày số liệu)" value={fmtMoney(tot.paid) + ' đ'} sub={`Còn lại ${fmtMoney(tot.remaining)} đ`} tone="green" />
@@ -304,35 +348,38 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
       )}
 
       <div className="table-wrap">
-        {custs.length === 0 ? <Empty text={batchId ? 'Không có công nợ' : 'Quản trị bấm "Nhập công nợ (MISA tuổi nợ)" để tải danh sách'} /> : (
+        {custs.length === 0 ? <Empty text={batchId ? 'Không có công nợ' : `Chưa có công nợ ${isAll ? '' : curEnt + ' '}— kế toán bấm "Nhập công nợ" để tải file MISA`} /> : (
           <table>
-            <thead><tr><th>Mã KH</th><th>Khách hàng</th>{seeAll && <th>NV phụ trách</th>}<AgingHead /><th></th></tr></thead>
+            <thead><tr>{isAll && <th>Pháp nhân</th>}<th>Mã KH</th><th>Khách hàng</th>{seeAll && <th>NV phụ trách</th>}<AgingHead /><th></th></tr></thead>
             <tbody>
               {custs.map((x) => (
                 <tr key={x.id}>
+                  {isAll && <td><span className={'badge ' + (x.entity === 'PLA' ? 'amber' : 'blue')}>{x.entity}</span></td>}
                   <td className="nowrap">{x.customerCode}</td>
                   <td><b>{x.customerName}</b>{x.address && <div className="small">{x.address}</div>}</td>
                   {seeAll && <td>{x.ownerEmail ? staffName(x.ownerEmail) : <span className="badge red">{saleLabel(x)}</span>}</td>}
                   <AgingCells x={x} bold />
                   <td className="nowrap">
                     {onCollect && (isAdmin || x.ownerEmail === email) && x.remaining > 0 && (
-                      <button className="btn sm primary" onClick={() => onCollect({ customerId: x.customerId || '', customerName: x.customerName }, x.remaining)}>💰 Ghi thu tiền</button>
+                      <button className="btn sm primary" onClick={() => onCollect({ customerId: x.customerId || '', customerName: x.customerName, entity: x.entity }, x.remaining)}>💰 Ghi thu tiền</button>
                     )}
                   </td>
                 </tr>
               ))}
             </tbody>
-            <tfoot><tr><td></td><td>Tổng ({tot.count} KH)</td>{seeAll && <td></td>}<AgingCells x={tot} bold /><td></td></tr></tfoot>
+            <tfoot><tr>{isAll && <td></td>}<td></td><td>Tổng ({tot.count} KH)</td>{seeAll && <td></td>}<AgingCells x={tot} bold /><td></td></tr></tfoot>
           </table>
         )}
       </div>
-      {importing && <ImportReceivables current={info} onClose={() => setImporting(false)} onDone={setMeta} />}
+      {importing && <ImportReceivables metas={metas} defaultEntity={isAll ? '' : curEnt} onClose={() => setImporting(false)}
+        onDone={(mm, e) => { setMeta(mm); setEnt(e); }} />}
     </>
   );
 }
 
-function ImportReceivables({ current, onClose, onDone }) {
+function ImportReceivables({ metas, defaultEntity, onClose, onDone }) {
   const { email, staffList } = useApp();
+  const [entity, setEntity] = useState(defaultEntity || '');
   const [fileName, setFileName] = useState('');
   const [res, setRes] = useState(null);
   const [asOf, setAsOf] = useState(today());
@@ -348,6 +395,8 @@ function ImportReceivables({ current, onClose, onDone }) {
       if (!r.rows.length) throw new Error('Không đọc được dòng khách hàng nào trong file.');
       setRes(r); setFileName(file.name);
       if (r.asOf) setAsOf(r.asOf);
+      const d = detectEntity(r.company);
+      if (d) setEntity(d);
     } catch (e) { setErr(e.message); }
   };
 
@@ -359,23 +408,29 @@ function ImportReceivables({ current, onClose, onDone }) {
   const groups = res ? res.groups.map((g) => ({ ...g, staff: staffForGroup(staffList, g.code, g.name) })) : [];
   const missing = groups.filter((g) => !g.staff);
 
+  const detected = res ? detectEntity(res.company) : '';
   const run = async () => {
+    if (!entity) { setErr('Hãy chọn pháp nhân (VAP hoặc PLA) của file này.'); return; }
+    if (detected && detected !== entity && !window.confirm(`File này có tên công ty "${res.company}" (có vẻ là ${detected}) nhưng bạn đang chọn ${entity}. Vẫn nhập vào ${entity}?`)) return;
+    const current = metas[entity];
     setBusy('Đang ghi dữ liệu…'); setErr('');
     try {
       const batchId = Date.now().toString(36);
       for (let i = 0; i < withOwner.length; i += 400) {
         const b = writeBatch(db);
-        withOwner.slice(i, i + 400).forEach(({ line, ...r }) => b.set(doc(collection(db, 'receivables')), { ...r, batchId, asOf }));
+        withOwner.slice(i, i + 400).forEach(({ line, ...r }) => b.set(doc(collection(db, 'receivables')), { ...r, entity, batchId, asOf }));
         await b.commit();
         setBusy(`Đã ghi ${Math.min(i + 400, withOwner.length)}/${withOwner.length} khách hàng…`);
       }
       const meta = {
-        batchId, asOf, fileName, format: 'misa-aging', buckets: res.buckets, rowCount: withOwner.length,
+        batchId, asOf, fileName, company: res.company || '', format: 'misa-aging', buckets: res.buckets, rowCount: withOwner.length,
         total, importedAt: serverTimestamp(), importedBy: email,
       };
-      await setDoc(doc(db, 'settings', 'receivables'), meta);
-      await saveSnapshot(asOf, res.buckets, withOwner);
-      onDone(meta);
+      // Mỗi pháp nhân 1 mục trong settings/receivables.entities (ghi đè cả doc để bỏ định dạng cũ chưa chia pháp nhân)
+      const all = { entities: { ...metas, [entity]: meta } };
+      await setDoc(doc(db, 'settings', 'receivables'), all);
+      await saveSnapshot(entity, asOf, res.buckets, withOwner);
+      onDone({ entities: { ...metas, [entity]: { ...meta, importedAt: new Date() } } }, entity);
       if (current?.batchId) {
         setBusy('Đang dọn số liệu cũ…');
         const old = await getDocs(query(collection(db, 'receivables'), where('batchId', '==', current.batchId)));
@@ -385,19 +440,29 @@ function ImportReceivables({ current, onClose, onDone }) {
           await b.commit();
         }
       }
-      setDone(`Đã nhập công nợ ${withOwner.length} khách hàng, tổng ${fmtMoney(total)} đ (đến ngày ${fmtDate(asOf)}).`);
+      setDone(`Đã nhập công nợ ${entity}: ${withOwner.length} khách hàng, tổng ${fmtMoney(total)} đ (đến ngày ${fmtDate(asOf)}).`);
       setRes(null);
     } catch (e) { setErr(e.message); }
     setBusy('');
   };
 
   return (
-    <Modal title="Nhập công nợ phải thu theo tuổi nợ (MISA AMIS)" onClose={onClose} wide>
+    <Modal title={'Nhập công nợ phải thu theo tuổi nợ (MISA AMIS)' + (entity ? ' – ' + entity : '')} onClose={onClose} wide>
       <p className="small">
         Trên MISA AMIS: <b>Báo cáo → Phân tích công nợ phải thu theo tuổi nợ</b>, chọn nhóm theo <b>Nhóm khách hàng</b> (mỗi nhóm là một sale), xuất Excel rồi chọn file ở đây.
         Sale được gán theo <b>Mã nhóm khách hàng</b> — khớp với <b>Họ tên</b> nhân viên ở mục Nhân viên (VD: DAUQUANGTHANG).
-        Lần nhập mới sẽ <b>thay thế</b> toàn bộ số liệu lần trước.
+        Mỗi pháp nhân nhập <b>1 file riêng</b>; lần nhập mới chỉ <b>thay thế</b> số liệu cũ của đúng pháp nhân đó.
       </p>
+      <div className="filters" style={{ marginBottom: 10 }}>
+        <b>Pháp nhân của file:</b>
+        {ENTITIES.map(([k]) => (
+          <label key={k} className="nowrap" style={{ fontWeight: entity === k ? 700 : 400 }}>
+            <input type="radio" name="entity" checked={entity === k} onChange={() => setEntity(k)} /> {entityLabel(k)}
+            {metas[k]?.asOf && <span className="small"> (đang có số liệu đến {fmtDate(metas[k].asOf)})</span>}
+          </label>
+        ))}
+      </div>
+      {res?.company && <div className="small" style={{ marginBottom: 6 }}>Tên công ty trong file: <b>{res.company}</b>{detected ? ` → tự nhận là ${detected}` : ' → hãy chọn pháp nhân ở trên'}</div>}
       <input type="file" accept=".xlsx,.xls" onChange={(e) => e.target.files[0] && load(e.target.files[0])} />
       {err && <div className="error-box" style={{ marginTop: 10 }}>{err}</div>}
       {done && <div className="ok-box" style={{ marginTop: 10 }}>{done}</div>}
@@ -456,7 +521,7 @@ function ImportReceivables({ current, onClose, onDone }) {
       {busy && <div className="ok-box" style={{ marginTop: 10 }}>{busy}</div>}
       <div className="form-actions">
         <button type="button" className="btn" onClick={onClose}>Đóng</button>
-        {res && <button type="button" className="btn primary" disabled={!!busy || !withOwner.length} onClick={run}>Nhập công nợ {withOwner.length} khách hàng</button>}
+        {res && <button type="button" className="btn primary" disabled={!!busy || !withOwner.length || !entity} onClick={run}>Nhập công nợ {entity || '(chọn pháp nhân)'} – {withOwner.length} khách hàng</button>}
       </div>
     </Modal>
   );
