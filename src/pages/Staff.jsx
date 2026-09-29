@@ -34,7 +34,7 @@ export default function Staff() {
               {staffList.map((s) => (
                 <tr key={s.email}>
                   <td><b>{s.name}</b></td><td>{s.email}</td><td>{s.phone}</td>
-                  <td><span className={'badge ' + (s.role === 'admin' ? 'amber' : 'blue')}>{s.role === 'admin' ? 'Quản trị' : 'Sale'}</span></td>
+                  <td><span className={'badge ' + (s.role === 'admin' ? 'amber' : s.role === 'accountant' ? 'green' : 'blue')}>{s.role === 'admin' ? 'Quản trị' : s.role === 'accountant' ? 'Kế toán' : 'Sale'}</span></td>
                   <td>{s.active !== false ? <span className="badge green">Đang làm</span> : <span className="badge red">Đã khóa</span>}</td>
                   <td className="nowrap">
                     <button className="btn sm" onClick={() => setEdit({ ...blank, ...s, _existing: true })}>Sửa</button>{' '}
@@ -77,6 +77,7 @@ function StaffForm({ initial, onClose }) {
             <select value={f.role} onChange={set('role')}>
               <option value="sale">Nhân viên sale (chỉ thấy dữ liệu của mình)</option>
               <option value="admin">Quản trị (thấy tất cả)</option>
+              <option value="accountant">Kế toán (chỉ xem và nhập công nợ)</option>
             </select>
           </Field>
           <Field label="Đang làm việc (bỏ tick để khóa tài khoản)"><input type="checkbox" checked={f.active} onChange={set('active')} /></Field>
