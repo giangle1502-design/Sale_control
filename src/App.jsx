@@ -17,7 +17,7 @@ import Staff from './pages/Staff';
 import Settings from './pages/Settings';
 
 export default function App() {
-  const { user, allowed, isAdmin, loading, logout, email } = useApp();
+  const { user, allowed, isAdmin, isAccountant, loading, logout, email } = useApp();
   if (loading) return <div className="center">Đang tải…</div>;
   if (!user) return <Login />;
   if (!user.emailVerified) return <VerifyEmail user={user} logout={logout} />;
@@ -31,6 +31,17 @@ export default function App() {
         </div>
       </div>
     );
+  if (isAccountant) {
+    // Kế toán chỉ vào được mục Công nợ
+    return (
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="cong-no" element={<Debts />} />
+          <Route path="*" element={<Navigate to="/cong-no" />} />
+        </Route>
+      </Routes>
+    );
+  }
   return (
     <Routes>
       <Route element={<Layout />}>
