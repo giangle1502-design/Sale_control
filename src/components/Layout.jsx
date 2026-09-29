@@ -14,6 +14,7 @@ const NAV = [
   ['/mat-hang', '🏷️', 'Mặt hàng'],
 ];
 const ADMIN_NAV = [
+  ['/phan-tich-ban-hang', '📈', 'Phân tích bán hàng'],
   ['/nhan-vien', '🧑‍💼', 'Nhân viên'],
   ['/cai-dat', '⚙️', 'Cài đặt'],
 ];
