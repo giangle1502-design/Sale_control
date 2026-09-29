@@ -10,7 +10,7 @@ import { exportSheets } from '../lib/excel';
 import { useCustomers } from '../components/CustomerPicker';
 import { Empty, ErrorBox, Stat } from '../components/ui';
 import { weekStart } from './DailyNotes';
-import { staffForGroup } from './Receivables';
+import { ENTITIES, entityLabel, staffForGroup } from './Receivables';
 
 // ============================================================================
 // Phân tích công nợ theo tuần — so sánh các bản chụp (mỗi lần nhập file tuổi nợ MISA)
@@ -28,20 +28,30 @@ const Delta = ({ v, good = 'down' }) => {
 
 export default function DebtAnalysis() {
   const { isAdmin, staffName, staffList } = useApp();
-  const [snaps, setSnaps] = useState(null);
+  const [allSnaps, setAllSnaps] = useState(null);
+  const [ent, setEnt] = useState('VAP');
   const [err, setErr] = useState('');
   const [curKey, setCurKey] = useState('');
   const [prevKey, setPrevKey] = useState('');
 
   useEffect(() => {
     getDocs(collection(db, 'receivableSnapshots'))
-      .then((s) => setSnaps(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.asOf.localeCompare(b.asOf))))
-      .catch((e) => { setErr(e.message); setSnaps([]); });
+      .then((s) => setAllSnaps(s.docs.map((d) => ({ id: d.id, ...d.data() }))))
+      .catch((e) => { setErr(e.message); setAllSnaps([]); });
   }, []);
+  // Bản chụp của pháp nhân đang xem (bản cũ chưa chia pháp nhân = VAP; trùng ngày thì ưu tiên bản mới có ghi pháp nhân)
+  const snaps = useMemo(() => {
+    if (!allSnaps) return null;
+    const m = new Map();
+    allSnaps.filter((x) => (x.entity || 'VAP') === ent).forEach((x) => {
+      if (!m.has(x.asOf) || x.entity) m.set(x.asOf, x);
+    });
+    return [...m.values()].sort((a, b) => a.asOf.localeCompare(b.asOf));
+  }, [allSnaps, ent]);
 
   // Mặc định: bản mới nhất so với bản gần nhất cách ~7 ngày
   useEffect(() => {
-    if (!snaps?.length) return;
+    if (!snaps?.length) { setCurKey(''); setPrevKey(''); return; }
     const cur = snaps[snaps.length - 1];
     const target = addDays(cur.asOf, -7);
     const older = snaps.filter((s) => s.asOf < cur.asOf);
@@ -60,6 +70,7 @@ export default function DebtAnalysis() {
     () => (cur && prev ? scopedQuery('payments', { me: '', isAdmin: true, from: addDays(prev.asOf, 1), to: cur.asOf }) : null),
     [curKey, prevKey]
   );
+  const entPays = pays.data.filter((p) => !p.entity || p.entity === ent);
 
   const a = useMemo(() => {
     if (!cur) return null;
@@ -117,18 +128,24 @@ export default function DebtAnalysis() {
     }));
   }, [snaps]);
 
+  const chips = (
+    <div className="presets" style={{ marginBottom: 10 }}>
+      {ENTITIES.map(([k]) => <button key={k} className={'chip' + (ent === k ? ' on' : '')} onClick={() => setEnt(k)}>🏢 {entityLabel(k)}</button>)}
+    </div>
+  );
   if (snaps === null) return <Empty text="Đang tải…" />;
   if (!snaps.length) return (
     <>
+      {chips}
       <ErrorBox error={err} />
       <Empty text='Chưa có dữ liệu. Mỗi lần kế toán bấm "Nhập công nợ (MISA tuổi nợ)", hệ thống sẽ lưu lại một bản để so sánh theo tuần.' />
     </>
   );
 
-  if (!a) return <Empty text="Đang tải…" />;
-  const payTotal = pays.data.reduce((s, p) => s + num(p.amount), 0);
+  if (!a) return <>{chips}<Empty text="Đang tải…" /></>;
+  const payTotal = entPays.reduce((s, p) => s + num(p.amount), 0);
   const bucketName = (i) => (i < 0 ? 'Trong hạn' : buckets[i] || '');
-  const doExport = () => exportSheets(`PhanTichCongNo_${prevKey}_${curKey}`, {
+  const doExport = () => exportSheets(`PhanTichCongNo_${ent}_${prevKey}_${curKey}`, {
     'Theo sale': a.bySale.map((x) => ({
       'Nhân viên': x.owner ? staffName(x.owner) : `Chưa gán (${x.group || ''})`, 'Số KH': x.cust, 'Nợ đầu kỳ': Math.round(x.prevAmt), 'Nợ mới (ước tính)': Math.round(x.newDebt),
       'Đã thu (ước tính)': Math.round(x.collected), 'Nợ cuối kỳ': Math.round(x.curAmt), 'Quá hạn': Math.round(x.curOver), '% quá hạn': Math.round(x.pct * 100) + '%',
@@ -144,8 +161,9 @@ export default function DebtAnalysis() {
 
   return (
     <>
+      {chips}
       <div className="filters">
-        <span>Số liệu ngày</span>
+        <span>Số liệu <b>{ent}</b> ngày</span>
         <select value={curKey} onChange={(e) => setCurKey(e.target.value)}>
           {[...snaps].reverse().map((s) => <option key={s.asOf} value={s.asOf}>{fmtDate(s.asOf)}</option>)}
         </select>
