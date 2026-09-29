@@ -19,6 +19,11 @@ service cloud.firestore {
       return signedIn() && (me() in superAdmins()
         || (exists(staffPath()) && get(staffPath()).data.role == 'admin' && get(staffPath()).data.active != false));
     }
+    // Kế toán: chỉ xem & nhập công nợ (không xem hoạt động, báo giá, đơn hàng, khách hàng của sale)
+    function isAccountant() {
+      return signedIn() && exists(staffPath()) && get(staffPath()).data.role == 'accountant'
+        && get(staffPath()).data.active != false;
+    }
     function ownsExisting() { return resource.data.ownerEmail == me(); }
     function ownsNew() { return request.resource.data.ownerEmail == me(); }
 
@@ -31,13 +36,13 @@ service cloud.firestore {
     // Cài đặt chung
     match /settings/{id} {
       allow read: if isStaff();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || (id == 'receivables' && isAccountant());
     }
 
     // Dữ liệu của từng nhân viên: sale chỉ thấy/sửa dữ liệu của mình, admin thấy tất cả
     match /{coll}/{id} {
       allow read: if (coll in ['customers', 'activities', 'quotes', 'orders', 'payments'])
-        && isStaff() && (isAdmin() || ownsExisting());
+        && isStaff() && (isAdmin() || ownsExisting() || (coll == 'payments' && isAccountant()));
       allow create: if (coll in ['customers', 'activities', 'quotes', 'orders', 'payments'])
         && isStaff() && (isAdmin() || ownsNew());
       allow update: if (coll in ['customers', 'activities', 'quotes', 'orders', 'payments'])
@@ -79,10 +84,10 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Công nợ nhập từ phần mềm kế toán: sale xem khách của mình, chỉ quản trị nhập
+    // Công nợ nhập từ phần mềm kế toán: sale xem khách của mình; quản trị & kế toán xem tất cả và nhập
     match /receivables/{id} {
-      allow read: if isStaff() && (isAdmin() || ownsExisting());
-      allow write: if isAdmin();
+      allow read: if isStaff() && (isAdmin() || isAccountant() || ownsExisting());
+      allow write: if isAdmin() || isAccountant();
     }
 
     // Nhật ký gửi email: chỉ server ghi (Admin SDK bỏ qua rules), admin xem
