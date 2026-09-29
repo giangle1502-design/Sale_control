@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { ensureCustomer, saveDoc } from '../lib/data';
 import { fmtMoney, num, today } from '../lib/utils';
 import CustomerPicker from './CustomerPicker';
+import { ENTITIES, entityLabel } from '../pages/Receivables';
 import { CustomFieldInputs, Field, Modal } from './ui';
 
 export const METHODS = ['Chuyển khoản', 'Tiền mặt', 'Bù trừ', 'Khác'];
@@ -31,7 +32,7 @@ export default function PaymentForm({ initial, onClose, outstanding }) {
       <form onSubmit={submit}>
         {outstanding > 0 && (
           <div className="ok-box" style={{ marginBottom: 10 }}>
-            Khách <b>{f.customerName}</b> còn nợ <b>{fmtMoney(outstanding)} đ</b>.{' '}
+            Khách <b>{f.customerName}</b>{f.entity ? <> (pháp nhân <b>{f.entity}</b>)</> : ''} còn nợ <b>{fmtMoney(outstanding)} đ</b>.{' '}
             <a onClick={() => setF({ ...f, amount: Math.round(outstanding) })}>Thu đủ số này</a>
           </div>
         )}
@@ -39,6 +40,12 @@ export default function PaymentForm({ initial, onClose, outstanding }) {
           <Field label="Ngày thu" required><input type="date" value={f.date} onChange={set('date')} required /></Field>
           <Field label="Số tiền (đ)" required><input type="number" step="any" value={f.amount} onChange={set('amount')} required autoFocus /></Field>
           <Field label="Khách hàng" required full><CustomerPicker value={f} onChange={(c) => setF({ ...f, ...c })} required /></Field>
+          <Field label="Công nợ của pháp nhân">
+            <select value={f.entity || ''} onChange={set('entity')}>
+              <option value="">-- Không rõ --</option>
+              {ENTITIES.map(([k]) => <option key={k} value={k}>{entityLabel(k)}</option>)}
+            </select>
+          </Field>
           <Field label="Hình thức"><select value={f.method} onChange={set('method')}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select></Field>
           <Field label="Số hóa đơn / đơn hàng (nếu có)"><input value={f.orderNo} onChange={set('orderNo')} /></Field>
           <Field label="Ghi chú" full><input value={f.note} onChange={set('note')} /></Field>
