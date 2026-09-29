@@ -15,6 +15,7 @@ import Customers from './pages/Customers';
 import Products from './pages/Products';
 import Staff from './pages/Staff';
 import Settings from './pages/Settings';
+import SalesAnalysis from './pages/SalesAnalysis';
 
 export default function App() {
   const { user, allowed, isAdmin, isAccountant, loading, logout, email } = useApp();
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="mat-hang" element={<Products />} />
         {isAdmin && <Route path="nhan-vien" element={<Staff />} />}
         {isAdmin && <Route path="cai-dat" element={<Settings />} />}
+        {isAdmin && <Route path="phan-tich-ban-hang" element={<SalesAnalysis />} />}
         <Route path="*" element={<Navigate to="/" />} />
       </Route>
     </Routes>
