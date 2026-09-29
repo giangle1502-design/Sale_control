@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { collection, doc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useApp } from '../context/AppContext';
 import { useQuery } from '../lib/hooks';
@@ -18,6 +18,16 @@ import { Empty, ErrorBox, Modal, Stat } from '../components/ui';
 const DEFAULT_BUCKETS = ['1-3 ngày', '4-10 ngày', '11-15 ngày', '16-30 ngày', 'Trên 30 ngày'];
 const toMs = (v) => (v?.toMillis ? v.toMillis() : Date.parse(v) || 0);
 const squash = (s) => norm(s).replace(/ /g, '');
+
+// Bản chụp công nợ (mỗi ngày số liệu 1 bản) để phân tích theo tuần
+export const snapRow = (r) => ({
+  k: r.customerCode ? 'c:' + norm(r.customerCode) : 'n:' + norm(r.customerName),
+  code: r.customerCode || '', name: r.customerName || '', group: r.saleGroup || '', owner: r.ownerEmail || '',
+  amount: num(r.amount), overdue: num(r.overdue), notDue: num(r.notDue), aging: (r.aging || []).map(num),
+});
+export const saveSnapshot = (asOf, buckets, rows) => setDoc(doc(db, 'receivableSnapshots', asOf), {
+  asOf, buckets, rows: rows.map(snapRow), savedAt: serverTimestamp(),
+});
 
 // Tìm nhân viên theo mã/tên nhóm khách hàng trong file kế toán (VD: DAUQUANGTHANG / ĐẬU QUANG THẮNG)
 export function staffForGroup(staffList, code, name) {
@@ -145,6 +155,14 @@ export default function Receivables({ staffFilter, setStaffFilter, onCollect }) 
       } catch (e) { setSyncMsg('Không gán được sale: ' + e.message); }
     })();
   }, [seeAll, owner, data, staffList]);
+
+  // Lưu bản chụp cho số liệu hiện tại nếu chưa có (dữ liệu nhập trước khi có tính năng phân tích tuần)
+  useEffect(() => {
+    if (!seeAll || owner || !batchId || !data.length || !info?.buckets) return;
+    getDoc(doc(db, 'receivableSnapshots', asOf))
+      .then((s) => { if (!s.exists()) return saveSnapshot(asOf, info.buckets, data); })
+      .catch(() => {});
+  }, [seeAll, owner, batchId, data.length, asOf]);
 
   // Phiếu thu ghi trên app SAU lần nhập số liệu kế toán → trừ vào công nợ còn lại
   const importedAt = toMs(info?.importedAt);
@@ -356,6 +374,7 @@ function ImportReceivables({ current, onClose, onDone }) {
         total, importedAt: serverTimestamp(), importedBy: email,
       };
       await setDoc(doc(db, 'settings', 'receivables'), meta);
+      await saveSnapshot(asOf, res.buckets, withOwner);
       onDone(meta);
       if (current?.batchId) {
         setBusy('Đang dọn số liệu cũ…');
