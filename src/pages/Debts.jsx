@@ -38,6 +38,29 @@ export function computeDebts(orders, payments, ref = today()) {
 }
 
 export default function Debts() {
+  const { isAccountant } = useApp();
+  return isAccountant ? <AccountantDebts /> : <DebtsMain />;
+}
+
+// Màn hình của kế toán: chỉ công nợ theo số liệu kế toán (xem tất cả sale, nhập file), không ghi thu tiền
+function AccountantDebts() {
+  const { staffList } = useApp();
+  const [staff, setStaff] = useState('');
+  return (
+    <>
+      <div className="page-head"><h1>Công nợ phải thu</h1></div>
+      <div className="presets" style={{ marginBottom: 10 }}>
+        <select value={staff} onChange={(e) => setStaff(e.target.value)}>
+          <option value="">Tất cả nhân viên sale</option>
+          {staffList.filter((s) => s.role !== 'accountant').map((s) => <option key={s.email} value={s.email}>{s.name || s.email}</option>)}
+        </select>
+      </div>
+      <Receivables staffFilter={staff} setStaffFilter={setStaff} />
+    </>
+  );
+}
+
+function DebtsMain() {
   const { email, isAdmin, profile, config, staffName, staffList } = useApp();
   const [range, setRange] = useRange('Tháng này');
   const [staff, setStaff] = useState('');
