@@ -19,9 +19,9 @@ const ADMIN_NAV = [
 ];
 
 export default function Layout() {
-  const { profile, isAdmin, logout, config } = useApp();
+  const { profile, isAdmin, isAccountant, logout, config } = useApp();
   const [open, setOpen] = useState(false);
-  const items = isAdmin ? [...NAV, ...ADMIN_NAV] : NAV;
+  const items = isAccountant ? [['/cong-no', '💰', 'Công nợ']] : isAdmin ? [...NAV, ...ADMIN_NAV] : NAV;
   return (
     <div className="shell">
       <aside className={'side' + (open ? ' open' : '')}>
@@ -35,7 +35,7 @@ export default function Layout() {
         </nav>
         <div className="me">
           <div><b>{profile.name}</b><small>{profile.email}</small>
-            <small className="role">{isAdmin ? 'Quản trị' : 'Nhân viên sale'}</small></div>
+            <small className="role">{isAdmin ? 'Quản trị' : isAccountant ? 'Kế toán' : 'Nhân viên sale'}</small></div>
           <button className="btn ghost sm" onClick={logout}>Đăng xuất</button>
         </div>
       </aside>
