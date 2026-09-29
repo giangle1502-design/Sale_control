@@ -95,6 +95,11 @@ service cloud.firestore {
       allow read, write: if isAdmin() || isAccountant();
     }
 
+    // Báo cáo bán hàng Ecount theo tháng (phân tích): chỉ quản trị
+    match /salesMonths/{id} {
+      allow read, write: if isAdmin();
+    }
+
     // Nhật ký gửi email: chỉ server ghi (Admin SDK bỏ qua rules), admin xem
     match /reportLogs/{id} {
       allow read: if isAdmin();
