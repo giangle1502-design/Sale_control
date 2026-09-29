@@ -180,7 +180,7 @@ function NoteList() {
   // Nhắc nộp: tuần trước và tháng trước
   const lastWeek = periodOf('week', addDays(weekStart(today()), -7));
   const lastMonth = periodOf('month', addDays(monthFirst(today()), -1));
-  const sales = staffList.filter((s) => s.active !== false && s.role !== 'admin');
+  const sales = staffList.filter((s) => s.active !== false && s.role !== 'admin' && s.role !== 'accountant');
   const hasNote = (p, e) => data.some((n) => n.ownerEmail === e && n.period === p.type && n.date === p.key);
   const missWeek = from <= lastWeek.key && !staff ? sales.filter((s) => !hasNote(lastWeek, s.email)) : [];
   const missMonth = from <= lastMonth.key && !staff ? sales.filter((s) => !hasNote(lastMonth, s.email)) : [];
