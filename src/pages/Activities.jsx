@@ -65,7 +65,7 @@ export default function Activities() {
                   {isAdmin && <td>{staffName(r.ownerEmail)}</td>}
                   <td>{r.customerName}</td>
                   <td><span className="badge blue">{r.type}</span></td>
-                  <td>{r.content}{r.result && <div className="small">→ {r.result}</div>}</td>
+                  <td>{r.content}{r.result && <div className="act-result">→ {r.result}</div>}</td>
                   <td>{r.nextAction}{r.nextDate && <div className="small">Hẹn: {fmtDate(r.nextDate)}</div>}</td>
                   {fields.map((f) => <td key={f.key}>{String(customValue(f, r.custom?.[f.key]))}</td>)}
                   <td className="nowrap">
