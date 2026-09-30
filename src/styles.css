@@ -161,5 +161,5 @@ tfoot td { font-weight: 700; background: #f8fafc; }
 .pmp-item.on { background: var(--primary-soft); }
 .pmp-item input[type='checkbox'] { width: 15px; height: 15px; pointer-events: none; }
 
-/* Kết quả hoạt động: chữ đậm màu xanh */
-.act-result { color: var(--primary); font-weight: 600; font-size: 13px; margin-top: 2px; }
+/* Kết quả hoạt động: chữ đậm màu tím, luôn hiện đầy đủ */
+.act-result { color: #6a1b9a; font-weight: 700; font-size: 13px; margin-top: 2px; white-space: pre-line; }
