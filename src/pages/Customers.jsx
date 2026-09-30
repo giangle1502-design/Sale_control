@@ -89,7 +89,7 @@ function ContactCell({ info, onHistory }) {
       <span className={'badge ' + tone}>{days === 0 ? 'Hôm nay' : `${days} ngày trước`}</span>
       {info.list.slice(0, 4).map((a, i) => (
         <div key={a.id || i} className="small" style={{ marginTop: 3, paddingLeft: 6, borderLeft: '2px solid ' + (i === 0 ? 'var(--primary)' : '#dde3ea') }}>
-          <span className="nowrap">{fmtDate(a.date).slice(0, 5)}</span> · <b>{a.type}</b>{a.result ? ': ' + clip(a.result, 50) : a.content ? ': ' + clip(a.content, 50) : ''}
+          <span className="nowrap">{fmtDate(a.date).slice(0, 5)}</span> · <b>{a.type}</b>{a.result ? <>: <span className="act-result" style={{ display: 'inline' }}>{clip(a.result, 50)}</span></> : a.content ? ': ' + clip(a.content, 50) : ''}
         </div>
       ))}
       <a href="#" className="small" onClick={(e) => { e.preventDefault(); onHistory(); }}>
@@ -335,7 +335,7 @@ function HistoryModal({ customer, info, staffName, isAdmin, onAdd, onClose }) {
                   <td className="nowrap">{fmtDate(a.date)}</td>
                   {isAdmin && <td>{staffName(a.ownerEmail)}</td>}
                   <td><span className="badge blue">{a.type}</span></td>
-                  <td>{a.content}{a.result && <div className="small">→ {a.result}</div>}</td>
+                  <td>{a.content}{a.result && <div className="act-result">→ {a.result}</div>}</td>
                   <td>{a.nextAction}{a.nextDate && <div className="small">Hẹn: {fmtDate(a.nextDate)}</div>}</td>
                 </tr>
               ))}
