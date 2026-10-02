@@ -53,14 +53,14 @@ function AccountantDebts() {
       <div className="page-head"><h1>Công nợ phải thu</h1></div>
       <div className="presets" style={{ marginBottom: 10 }}>
         {[['acc', 'Công nợ'], ['ana', '📈 Phân tích tuần']].map(([k, l]) => <button key={k} className={'chip' + (tab === k ? ' on' : '')} onClick={() => setTab(k)}>{l}</button>)}
-        {tab === 'acc' && (
+        {(tab === 'acc' || tab === 'ana') && (
           <select value={staff} onChange={(e) => setStaff(e.target.value)} style={{ marginLeft: 8 }}>
             <option value="">Tất cả nhân viên sale</option>
             {staffList.filter((s) => s.role !== 'accountant').map((s) => <option key={s.email} value={s.email}>{s.name || s.email}</option>)}
           </select>
         )}
       </div>
-      {tab === 'ana' ? <DebtAnalysis /> : <Receivables staffFilter={staff} setStaffFilter={setStaff} />}
+      {tab === 'ana' ? <DebtAnalysis staffFilter={staff} /> : <Receivables staffFilter={staff} setStaffFilter={setStaff} />}
     </>
   );
 }
@@ -119,7 +119,7 @@ function DebtsMain() {
           </select>
         )}
       </div>
-      {tab === 'ana' ? <DebtAnalysis /> : tab === 'acc' ? <Receivables staffFilter={staff} setStaffFilter={setStaff} onCollect={(c, amt) => { setOutstanding(amt); setEdit({ ...blank(), ...c }); }} /> : <>
+      {tab === 'ana' ? <DebtAnalysis staffFilter={staff} /> : tab === 'acc' ? <Receivables staffFilter={staff} setStaffFilter={setStaff} onCollect={(c, amt) => { setOutstanding(amt); setEdit({ ...blank(), ...c }); }} /> : <>
       {tab === 'pay' && <FilterBar range={range} setRange={setRange} />}
       <div className="stats">
         <Stat label="Tổng còn phải thu" value={fmtMoney(totals.balance) + ' đ'} tone="amber" />
