@@ -94,6 +94,7 @@ export default function DebtAnalysis() {
     const agingCur = buckets.map((_, i) => cur.rows.reduce((s, r) => s + num(r.aging?.[i]), 0));
     const agingPrev = buckets.map((_, i) => (prev?.rows || []).reduce((s, r) => s + num(r.aging?.[i]), 0));
     const worse = rows.filter((r) => r.inCur && r.curWorst > r.prevWorst && r.curOver > 0).sort((x, y) => y.curWorst - x.curWorst || y.curOver - x.curOver);
+    const paid = rows.filter((r) => r.collected > 0).sort((x, y) => y.collected - x.collected);
     const cleared = rows.filter((r) => r.inPrev && r.prevOver > 0 && r.curOver === 0).sort((x, y) => y.prevOver - x.prevOver);
     // Theo sale
     const sm = new Map();
@@ -107,7 +108,7 @@ export default function DebtAnalysis() {
     const bySale = [...sm.values()].map((x) => ({ ...x, pct: x.curAmt ? x.curOver / x.curAmt : 0, collectRate: x.prevAmt ? x.collected / x.prevAmt : 0 }))
       .sort((x, y) => y.pct - x.pct);
     return {
-      rows, worse, cleared, bySale, agingCur, agingPrev,
+      rows, worse, cleared, paid, bySale, agingCur, agingPrev,
       prevTotal: sum((r) => r.prevAmt), curTotal: sum((r) => r.curAmt),
       newDebt: sum((r) => r.newDebt), collected: sum((r) => r.collected),
       prevOver: sum((r) => r.prevOver), curOver: sum((r) => r.curOver),
@@ -155,6 +156,10 @@ export default function DebtAnalysis() {
       'Đã thu (ước tính)': Math.round(r.collected), 'Nợ cuối kỳ': Math.round(r.curAmt), 'Quá hạn': Math.round(r.curOver),
       'Nhóm tuổi nợ tuần trước': bucketName(r.prevWorst), 'Nhóm tuổi nợ hiện tại': bucketName(r.curWorst),
     })),
+    'Đã trả nợ': a.paid.map((r) => ({
+      'Mã KH': r.code, 'Khách hàng': r.name, 'Nhân viên': saleOf(r), 'Nợ đầu kỳ': Math.round(r.prevAmt), 'Đã trả (ước tính)': Math.round(r.collected),
+      'Còn nợ': Math.round(r.curAmt), '% đã trả': r.prevAmt ? Math.round((r.collected / r.prevAmt) * 100) + '%' : '',
+    })),
     'Chuyển xấu': a.worse.map((r) => ({ 'Mã KH': r.code, 'Khách hàng': r.name, 'Nhân viên': saleOf(r), 'Trước': bucketName(r.prevWorst), 'Nay': bucketName(r.curWorst), 'Quá hạn': Math.round(r.curOver) })),
     'Đã hết quá hạn': a.cleared.map((r) => ({ 'Mã KH': r.code, 'Khách hàng': r.name, 'Nhân viên': saleOf(r), 'Quá hạn trước': Math.round(r.prevOver) })),
   });
@@ -180,7 +185,8 @@ export default function DebtAnalysis() {
       <div className="stats">
         <Stat label={`Tổng phải thu ${fmtDate(curKey)}`} value={fmtMoney(a.curTotal) + ' đ'} sub={prev ? <Delta v={a.curTotal - a.prevTotal} /> : ''} tone="amber" />
         {prev && <Stat label="Nợ mới phát sinh (ước tính)" value={fmtMoney(a.newDebt) + ' đ'} sub={`từ ${fmtDate(prevKey)} đến ${fmtDate(curKey)}`} />}
-        {prev && <Stat label="Nợ cũ đã giảm / đã thu (ước tính)" value={fmtMoney(a.collected) + ' đ'} sub={`Phiếu thu sale ghi trên app: ${fmtMoney(payTotal)} đ`} tone="green" />}
+        {prev && <Stat label="Nợ cũ đã giảm / đã thu (ước tính)" value={fmtMoney(a.collected) + ' đ'} sub={`${a.paid.length} khách đã trả · Phiếu thu trên app: ${fmtMoney(payTotal)} đ`} tone="green"
+          onClick={() => document.getElementById('debt-paid')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />}
         <Stat label="Nợ quá hạn" value={fmtMoney(a.curOver) + ' đ'} sub={prev ? <Delta v={a.curOver - a.prevOver} /> : `${a.curTotal ? Math.round((a.curOver / a.curTotal) * 100) : 0}% tổng nợ`} tone="red" />
         <Stat label={'Quá hạn ' + (buckets[lastIdx] || '').toLowerCase()} value={fmtMoney(a.agingCur[lastIdx] || 0) + ' đ'} sub={prev ? <Delta v={(a.agingCur[lastIdx] || 0) - (a.agingPrev[lastIdx] || 0)} /> : ''} tone="red" />
       </div>
@@ -243,6 +249,32 @@ export default function DebtAnalysis() {
       </div>
 
       {prev && (
+        <>
+          <div className="section-title" id="debt-paid">
+            💰 Khách hàng đã trả nợ từ {fmtDate(prevKey)} đến {fmtDate(curKey)} ({a.paid.length} KH · {fmtMoney(a.collected)} đ)
+          </div>
+          <div className="table-wrap" style={{ marginBottom: 14, maxHeight: 420, overflow: 'auto' }}>
+            {a.paid.length === 0 ? <Empty text="Chưa có khách nào giảm nợ trong kỳ" /> : (
+              <table>
+                <thead><tr><th>#</th><th>Khách hàng</th><th>Sale</th><th className="num">Nợ đầu kỳ</th><th className="num">Đã trả</th><th className="num">Còn nợ</th><th className="num">% đã trả</th></tr></thead>
+                <tbody>{a.paid.map((r, i) => (
+                  <tr key={r.k}>
+                    <td className="small">{i + 1}</td>
+                    <td><b>{r.name}</b><div className="small">{r.code}</div></td>
+                    <td>{saleOf(r)}</td>
+                    <td className="num">{fmtMoney(r.prevAmt)}</td>
+                    <td className="num" style={{ color: 'var(--green)', fontWeight: 700 }}>{fmtMoney(r.collected)}</td>
+                    <td className="num">{r.curAmt ? fmtMoney(r.curAmt) : <span className="badge green">Hết nợ</span>}</td>
+                    <td className="num">{r.prevAmt ? Math.round((r.collected / r.prevAmt) * 100) + '%' : '-'}</td>
+                  </tr>
+                ))}</tbody>
+                <tfoot><tr><td></td><td>Tổng ({a.paid.length} KH)</td><td></td>
+                  <td className="num">{fmtMoney(a.paid.reduce((t, r) => t + r.prevAmt, 0))}</td>
+                  <td className="num" style={{ color: 'var(--green)' }}>{fmtMoney(a.collected)}</td>
+                  <td className="num">{fmtMoney(a.paid.reduce((t, r) => t + r.curAmt, 0))}</td><td></td></tr></tfoot>
+              </table>
+            )}
+          </div>
         <div className="grid2" style={{ marginBottom: 14 }}>
           <div>
             <div className="section-title">⚠ Khách chuyển xấu ({a.worse.length})</div>
@@ -269,6 +301,7 @@ export default function DebtAnalysis() {
             </div>
           </div>
         </div>
+        </>
       )}
 
       <div className="grid2" style={{ marginBottom: 14 }}>
