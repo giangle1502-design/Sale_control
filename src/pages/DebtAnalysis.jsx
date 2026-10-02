@@ -26,7 +26,7 @@ const Delta = ({ v, good = 'down' }) => {
   return <span className="small" style={{ color: bad ? 'var(--red)' : 'var(--green)', fontWeight: 600 }}>{up ? '▲ +' : '▼ −'}{fmtMoney(Math.abs(v))} đ</span>;
 };
 
-export default function DebtAnalysis() {
+export default function DebtAnalysis({ staffFilter = '' }) {
   const { isAdmin, staffName, staffList } = useApp();
   const [allSnaps, setAllSnaps] = useState(null);
   const [ent, setEnt] = useState('VAP');
@@ -46,12 +46,16 @@ export default function DebtAnalysis() {
     allSnaps.filter((x) => (x.entity || 'VAP') === ent).forEach((x) => {
       if (!m.has(x.asOf) || x.entity) m.set(x.asOf, x);
     });
-    return [...m.values()].sort((a, b) => a.asOf.localeCompare(b.asOf));
-  }, [allSnaps, ent]);
+    // Lọc theo nhân viên sale đang chọn (gán theo nhóm KH trong file kế toán)
+    const mine = (r) => (staffForGroup(staffList, r.group, '')?.email || r.owner) === staffFilter;
+    return [...m.values()].sort((a, b) => a.asOf.localeCompare(b.asOf))
+      .map((x) => (staffFilter ? { ...x, rows: (x.rows || []).filter(mine) } : x));
+  }, [allSnaps, ent, staffFilter, staffList]);
 
   // Mặc định: bản mới nhất so với bản gần nhất cách ~7 ngày
   useEffect(() => {
     if (!snaps?.length) { setCurKey(''); setPrevKey(''); return; }
+    if (curKey && snaps.some((x) => x.asOf === curKey)) return; // đổi nhân viên: giữ nguyên ngày đang xem
     const cur = snaps[snaps.length - 1];
     const target = addDays(cur.asOf, -7);
     const older = snaps.filter((s) => s.asOf < cur.asOf);
@@ -67,8 +71,8 @@ export default function DebtAnalysis() {
 
   // Phiếu thu sale ghi trên app trong khoảng so sánh (tham khảo)
   const pays = useQuery(
-    () => (cur && prev ? scopedQuery('payments', { me: '', isAdmin: true, from: addDays(prev.asOf, 1), to: cur.asOf }) : null),
-    [curKey, prevKey]
+    () => (cur && prev ? scopedQuery('payments', { me: '', isAdmin: true, staffFilter, from: addDays(prev.asOf, 1), to: cur.asOf }) : null),
+    [curKey, prevKey, staffFilter]
   );
   const entPays = pays.data.filter((p) => !p.entity || p.entity === ent);
 
@@ -168,7 +172,7 @@ export default function DebtAnalysis() {
     <>
       {chips}
       <div className="filters">
-        <span>Số liệu <b>{ent}</b> ngày</span>
+        <span>Số liệu <b>{ent}</b>{staffFilter && <> · sale <b style={{ color: 'var(--primary)' }}>{staffName(staffFilter)}</b></>} ngày</span>
         <select value={curKey} onChange={(e) => setCurKey(e.target.value)}>
           {[...snaps].reverse().map((s) => <option key={s.asOf} value={s.asOf}>{fmtDate(s.asOf)}</option>)}
         </select>
