@@ -16,6 +16,7 @@ import Products from './pages/Products';
 import Staff from './pages/Staff';
 import Settings from './pages/Settings';
 import SalesAnalysis from './pages/SalesAnalysis';
+import PurchaseRequests from './pages/PurchaseRequests';
 
 export default function App() {
   const { user, allowed, isAdmin, isAccountant, loading, logout, email } = useApp();
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="don-hang" element={<Orders />} />
         <Route path="cong-no" element={<Debts />} />
         <Route path="cong-viec" element={<Tasks />} />
+        <Route path="mua-hang" element={<PurchaseRequests />} />
         <Route path="khach-hang" element={<Customers />} />
         <Route path="mat-hang" element={<Products />} />
         {isAdmin && <Route path="nhan-vien" element={<Staff />} />}
