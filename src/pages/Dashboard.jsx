@@ -12,6 +12,8 @@ import { customValue, Empty, ErrorBox, FilterBar, Stat, useRange } from '../comp
 import { useCustomers } from '../components/CustomerPicker';
 import { buildContactMap } from './Customers';
 import { noteLabel } from './DailyNotes';
+import { Link } from 'react-router-dom';
+import { prUrgency, UrgencyBadge, usePendingPurchases } from './PurchaseRequests';
 
 const BAR = '#1565c0';
 const short = (v) => (v >= 1e9 ? fmtNum(v / 1e9, 1) + ' tỷ' : v >= 1e6 ? fmtNum(v / 1e6, 1) + ' tr' : fmtNum(v, 0));
@@ -23,6 +25,7 @@ export default function Dashboard() {
   const scope = { me: email, isAdmin, staffFilter: staff, ...range };
   const deps = [email, isAdmin, staff, range.from, range.to];
 
+  const pendingPR = usePendingPurchases();
   const acts = useQuery(() => scopedQuery('activities', scope), deps);
   const ords = useQuery(() => scopedQuery('orders', scope), deps);
   const quos = useQuery(() => scopedQuery('quotes', scope), deps);
@@ -97,6 +100,30 @@ export default function Dashboard() {
         <button className="btn" onClick={doExport}>⬇ Xuất báo cáo Excel</button>
       </div>
       <FilterBar range={range} setRange={setRange} staff={staff} setStaff={setStaff} />
+      {pendingPR.length > 0 && (
+        <div className="pr-alert">
+          <div className="pr-alert-head">
+            <b>🛒 {pendingPR.length} yêu cầu mua hàng {isAdmin ? 'đang chờ sếp xử lý' : 'của bạn đang chờ xử lý'}</b>
+            {pendingPR.some((r) => prUrgency(r) === 'late') && <span className="badge red">{pendingPR.filter((r) => prUrgency(r) === 'late').length} quá ngày giao</span>}
+            <Link to="/mua-hang" className="btn sm" style={{ marginLeft: 'auto' }}>Xem & xử lý ›</Link>
+          </div>
+          <table>
+            <tbody>
+              {pendingPR.slice(0, 6).map((r) => (
+                <tr key={r.id}>
+                  <td className="nowrap">{fmtDate(r.date)}</td>
+                  {isAdmin && <td>{staffName(r.ownerEmail)}</td>}
+                  <td><b>{r.productCode}</b></td>
+                  <td className="num nowrap">{num(r.qty).toLocaleString('vi-VN')} {r.unit}</td>
+                  <td>{r.customerName}</td>
+                  <td className="nowrap">Giao {fmtDate(r.deliveryDate)} <UrgencyBadge r={r} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {pendingPR.length > 6 && <div className="small">… và {pendingPR.length - 6} yêu cầu khác</div>}
+        </div>
+      )}
       <ErrorBox error={err} />
       <div className="stats">
         <Stat label="Doanh số (đơn đã chốt)" value={fmtMoney(t.amount || 0)} sub={`${t.orders || 0} đơn · ${t.quotes || 0} báo giá (${fmtMoney(t.quoteAmount || 0)} đ)`} tone="green" />
