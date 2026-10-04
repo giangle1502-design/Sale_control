@@ -163,3 +163,14 @@ tfoot td { font-weight: 700; background: #f8fafc; }
 
 /* Kết quả hoạt động: chữ đậm màu tím, luôn hiện đầy đủ */
 .act-result { color: #6a1b9a; font-weight: 700; font-size: 13px; margin-top: 2px; white-space: pre-line; }
+
+/* Số yêu cầu mua hàng đang chờ trên menu */
+.nav-badge { margin-left: auto; min-width: 20px; padding: 1px 6px; border-radius: 10px; background: var(--amber); color: #fff; font-size: 12px; font-weight: 700; text-align: center; }
+.nav-badge.urgent { background: var(--red); animation: navpulse 1.6s ease-in-out infinite; }
+@keyframes navpulse { 50% { opacity: .55; } }
+
+/* Khung cảnh báo yêu cầu mua hàng ở Tổng quan */
+.pr-alert { border: 1px solid #f3c27a; border-left: 4px solid var(--amber); background: var(--amber-soft); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 14px; }
+.pr-alert-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.pr-alert table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pr-alert td { padding: 4px 8px 4px 0; border-top: 1px solid #f3dcb4; }
