@@ -95,6 +95,23 @@ service cloud.firestore {
       allow read, write: if isAdmin() || isAccountant();
     }
 
+    // Hàng đã xuất (Ecount, nhập theo ngày/tuần): admin xem & nhập; sale xem dòng của mình
+    match /shipments/{id} {
+      allow read: if isStaff() && (isAdmin() || ownsExisting());
+      allow write: if isAdmin();
+    }
+
+    // Tồn kho & hàng chưa về (Ecount): mọi nhân viên xem, admin nhập
+    match /stockSnap/{id} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+    // Đơn chưa giao (Ecount): sale chỉ xem đơn của mình
+    match /openOrders/{id} {
+      allow read: if isStaff() && (isAdmin() || ownsExisting());
+      allow write: if isAdmin();
+    }
+
     // Báo cáo bán hàng Ecount theo tháng (phân tích): chỉ quản trị
     match /salesMonths/{id} {
       allow read, write: if isAdmin();
