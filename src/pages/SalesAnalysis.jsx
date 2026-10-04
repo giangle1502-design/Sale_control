@@ -24,11 +24,12 @@ const pct = (a, b) => (b ? Math.round(((a - b) / Math.abs(b)) * 100) : null);
 const monthLabel = (m) => (m ? `Tháng ${m.slice(5)}/${m.slice(0, 4)}` : '');
 
 // Đọc file Ecount → dòng bán hàng
-export function parseSales(rows) {
+// extra: thêm cột cần đọc (VD báo cáo Hàng đã xuất cần Số phiếu giao, Batch/Lot…) — không ảnh hưởng phân tích tháng
+export function parseSales(rows, extra = {}, numKeys = []) {
   const hr = rows.findIndex((r) => r.some((c) => norm(c) === 'ma hang') && r.some((c) => norm(c) === 'so luong da ban'));
   if (hr < 0) throw new Error('Không tìm thấy dòng tiêu đề (cần có cột "Mã hàng" và "Số lượng đã bán"). Hãy dùng báo cáo "Chi tiết tình hình bán hàng" của Ecount.');
   const head = rows[hr].map(norm);
-  const idx = Object.fromEntries(Object.entries(COLS).map(([k, al]) => [k, head.findIndex((h) => al.includes(h))]));
+  const idx = Object.fromEntries(Object.entries({ ...COLS, ...extra }).map(([k, al]) => [k, head.findIndex((h) => al.includes(h))]));
   if (idx.ic < 0 || idx.q < 0 || idx.a < 0) throw new Error('Thiếu cột Mã hàng / Số lượng đã bán / Thành tiền.');
   const g = (r, k) => (idx[k] >= 0 ? r[idx[k]] : '');
   const out = [];
@@ -45,6 +46,7 @@ export function parseSales(rows) {
       d, co: cellText(g(r, 'co')), st: cellText(g(r, 'st')), so: cellText(g(r, 'so')), wh: cellText(g(r, 'wh')),
       cc: cellText(g(r, 'cc')), cn: cellText(g(r, 'cn')), ic, in: cellText(g(r, 'in')),
       q: toNumber(g(r, 'q')), p: toNumber(g(r, 'p')), a: toNumber(g(r, 'a')), sp: cellText(g(r, 'sp')) || '(chưa ghi sale)',
+      ...Object.fromEntries(Object.keys(extra).map((k) => [k, numKeys.includes(k) ? toNumber(g(r, k)) : cellText(g(r, k))])),
     });
   });
   return { rows: out, fileTotal };
