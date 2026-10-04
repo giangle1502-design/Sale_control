@@ -54,16 +54,17 @@ export default async function handler(req, res) {
     if (!recipients.length) return res.status(400).json({ error: 'Chưa có email nhận báo cáo trong Cài đặt' });
 
     const byDate = (c, field = 'date') => list(db.collection(c).where(field, '==', date));
-    const [activities, quotes, orders, payments, notes, customers, tasks, staffList] = await Promise.all([
+    const [activities, quotes, orders, payments, notes, customers, tasks, staffList, purchases] = await Promise.all([
       byDate('activities'), byDate('quotes'), byDate('orders'), byDate('payments'), byDate('dailyNotes', 'submittedDate'),
       byDate('customers', 'createdDate'), list(db.collection('tasks')),
       (await db.collection('staff').get()).docs.map((d) => ({ email: d.id, ...d.data() })),
+      list(db.collection('purchaseRequests').where('status', '==', 'Chờ xử lý')),
     ]);
 
     const rep = buildReport({ activities, quotes, orders, payments, tasks, notes, customers, staffList, from: date, to: date });
     const html = renderEmail({
       rep, date, config, appUrl: process.env.APP_URL,
-      data: { activities, quotes, orders, payments, notes, tasks, staffList },
+      data: { activities, quotes, orders, payments, notes, tasks, staffList, purchases },
     });
 
     const transporter = nodemailer.createTransport({
@@ -73,7 +74,7 @@ export default async function handler(req, res) {
     await transporter.sendMail({
       from: `"Báo cáo Sale - ${config.companyName}" <${process.env.SMTP_USER}>`,
       to: recipients.join(','),
-      subject: `[Báo cáo Sale] Ngày ${fmtDate(date)} — ${rep.total.orders || 0} đơn chốt, ${rep.total.activities || 0} hoạt động`,
+      subject: `[Báo cáo Sale] Ngày ${fmtDate(date)} — ${rep.total.orders || 0} đơn chốt, ${rep.total.activities || 0} hoạt động${purchases.length ? ` — ⚠ ${purchases.length} yêu cầu mua hàng chưa xử lý` : ''}`,
       html,
     });
 
