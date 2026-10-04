@@ -36,6 +36,27 @@ export function renderEmail({ rep, date, config, data, appUrl }) {
     </div>`;
   }
 
+  // Yêu cầu mua hàng chưa xử lý (luôn hiện, kể cả khi tắt chi tiết)
+  const pr = [...(data.purchases || [])].sort((a, b) => (a.deliveryDate || '9').localeCompare(b.deliveryDate || '9'));
+  if (pr.length) {
+    const nm = (e) => esc(data.staffList.find((s) => s.email === e)?.name || e);
+    const soon = new Date(Date.parse(date + 'T00:00:00Z') + 2 * 86400000).toISOString().slice(0, 10);
+    const late = pr.filter((r) => r.deliveryDate && r.deliveryDate < date).length;
+    html += `<div style="border:2px solid #c62828;border-radius:8px;padding:8px 12px;margin:14px 0;background:#fff8f7">
+      <h3 style="font-size:15px;margin:2px 0 6px;color:#c62828">🛒 ${pr.length} yêu cầu mua hàng CHƯA XỬ LÝ${late ? ` — ${late} đã quá ngày giao` : ''}</h3>` + table(
+      `<tr><th ${th}>Ngày YC</th><th ${th}>NV</th><th ${th}>Mã hàng</th><th ${th}>Số lượng</th><th ${th}>Ngày cần giao</th><th ${th}>Khách hàng</th><th ${th}>Đơn giá</th><th ${th}>Ghi chú</th></tr>`,
+      pr.map((r) => {
+        const lateR = r.deliveryDate && r.deliveryDate < date;
+        const soonR = !lateR && r.deliveryDate && r.deliveryDate <= soon;
+        return `<tr${lateR ? ' style="background:#fdecea"' : soonR ? ' style="background:#fff4e0"' : ''}><td ${td}>${fmtDate(r.date)}</td><td ${td}>${nm(r.ownerEmail)}</td>
+        <td ${td}><b>${esc(r.productCode)}</b>${r.productName ? `<div style="font-size:11px;color:#6b7684">${esc(r.productName)}</div>` : ''}</td>
+        <td ${tdr}>${num(r.qty).toLocaleString('vi-VN')} ${esc(r.unit || '')}</td>
+        <td ${td}>${lateR ? `<b style="color:#c62828">${fmtDate(r.deliveryDate)} (quá hạn)</b>` : soonR ? `<b style="color:#b26a00">${fmtDate(r.deliveryDate)} (sắp đến)</b>` : fmtDate(r.deliveryDate)}</td>
+        <td ${td}>${esc(r.customerName)}</td><td ${tdr}>${r.price ? fmtMoney(r.price) : ''}</td><td ${td}>${esc(r.note)}</td></tr>`;
+      })
+    ) + '</div>';
+  }
+
   html += h('Kết quả theo nhân viên') + table(
     `<tr><th ${th}>Nhân viên</th><th ${th}>Hoạt động</th><th ${th}>Báo giá</th><th ${th}>Đơn chốt</th><th ${th}>Tấn</th><th ${th}>Doanh số</th><th ${th}>Đã thu</th><th ${th}>Việc xong</th><th ${th}>Việc quá hạn</th></tr>`,
     rep.staff.map((s) => `<tr><td ${td}><b>${esc(s.name)}</b><div style="font-size:11px;color:#6b7684">${esc(Object.entries(s.byType).map(([k, v]) => `${k}: ${v}`).join(' · '))}</div></td>
