@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { prUrgency, usePendingPurchases } from '../pages/PurchaseRequests';
+import { useChatAlerts } from '../pages/Chat';
 
 const NAV = [
   ['/', '📊', 'Tổng quan'],
+  ['/tro-chuyen', '💬', 'Trò chuyện'],
   ['/nhat-ky', '📝', 'Báo cáo tuần/tháng'],
   ['/hoat-dong', '📞', 'Hoạt động KH'],
   ['/bao-gia', '📄', 'Báo giá'],
@@ -27,8 +29,9 @@ export default function Layout() {
   const { profile, isAdmin, isAccountant, logout, config } = useApp();
   const [open, setOpen] = useState(false);
   const pendingPR = usePendingPurchases();
+  const chat = useChatAlerts();
   const urgentPR = pendingPR.some((r) => prUrgency(r));
-  const items = isAccountant ? [['/cong-no', '💰', 'Công nợ']] : isAdmin ? [...NAV, ...ADMIN_NAV] : NAV;
+  const items = isAccountant ? [['/cong-no', '💰', 'Công nợ'], ['/tro-chuyen', '💬', 'Trò chuyện']] : isAdmin ? [...NAV, ...ADMIN_NAV] : NAV;
   return (
     <div className="shell">
       <aside className={'side' + (open ? ' open' : '')}>
@@ -37,6 +40,7 @@ export default function Layout() {
           {items.map(([to, icon, label]) => (
             <NavLink key={to} to={to} end={to === '/'} onClick={() => setOpen(false)}>
               <span className="ico">{icon}</span>{label}
+              {to === '/tro-chuyen' && chat.unread > 0 && <span className="nav-badge urgent" title={`${chat.unread} cuộc trò chuyện có tin mới`}>{chat.unread}</span>}
               {to === '/mua-hang' && pendingPR.length > 0 && (
                 <span className={'nav-badge' + (urgentPR ? ' urgent' : '')} title={`${pendingPR.length} yêu cầu đang chờ xử lý`}>{pendingPR.length}</span>
               )}
