@@ -9,6 +9,8 @@ const NAV = [
   ['/hoat-dong', '📞', 'Hoạt động KH'],
   ['/bao-gia', '📄', 'Báo giá'],
   ['/don-hang', '📦', 'Đơn hàng'],
+  ['/hang-da-xuat', '🚚', 'Hàng đã xuất'],
+  ['/ton-kho', '🏭', 'Tồn kho & Hàng về'],
   ['/cong-no', '💰', 'Công nợ & Thu tiền'],
   ['/cong-viec', '✅', 'Việc được giao'],
   ['/mua-hang', '🛒', 'Yêu cầu mua hàng'],
