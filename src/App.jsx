@@ -19,6 +19,7 @@ import SalesAnalysis from './pages/SalesAnalysis';
 import PurchaseRequests from './pages/PurchaseRequests';
 import Shipments from './pages/Shipments';
 import Inventory from './pages/Inventory';
+import Chat from './pages/Chat';
 
 export default function App() {
   const { user, allowed, isAdmin, isAccountant, loading, logout, email } = useApp();
@@ -41,6 +42,7 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route path="cong-no" element={<Debts />} />
+          <Route path="tro-chuyen" element={<Chat />} />
           <Route path="*" element={<Navigate to="/cong-no" />} />
         </Route>
       </Routes>
@@ -59,6 +61,7 @@ export default function App() {
         <Route path="mua-hang" element={<PurchaseRequests />} />
         <Route path="hang-da-xuat" element={<Shipments />} />
         <Route path="ton-kho" element={<Inventory />} />
+        <Route path="tro-chuyen" element={<Chat />} />
         <Route path="khach-hang" element={<Customers />} />
         <Route path="mat-hang" element={<Products />} />
         {isAdmin && <Route path="nhan-vien" element={<Staff />} />}
