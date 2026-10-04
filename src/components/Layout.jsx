@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { prUrgency, usePendingPurchases } from '../pages/PurchaseRequests';
 
 const NAV = [
   ['/', '📊', 'Tổng quan'],
@@ -10,6 +11,7 @@ const NAV = [
   ['/don-hang', '📦', 'Đơn hàng'],
   ['/cong-no', '💰', 'Công nợ & Thu tiền'],
   ['/cong-viec', '✅', 'Việc được giao'],
+  ['/mua-hang', '🛒', 'Yêu cầu mua hàng'],
   ['/khach-hang', '👥', 'Khách hàng'],
   ['/mat-hang', '🏷️', 'Mặt hàng'],
 ];
@@ -22,6 +24,8 @@ const ADMIN_NAV = [
 export default function Layout() {
   const { profile, isAdmin, isAccountant, logout, config } = useApp();
   const [open, setOpen] = useState(false);
+  const pendingPR = usePendingPurchases();
+  const urgentPR = pendingPR.some((r) => prUrgency(r));
   const items = isAccountant ? [['/cong-no', '💰', 'Công nợ']] : isAdmin ? [...NAV, ...ADMIN_NAV] : NAV;
   return (
     <div className="shell">
@@ -31,6 +35,9 @@ export default function Layout() {
           {items.map(([to, icon, label]) => (
             <NavLink key={to} to={to} end={to === '/'} onClick={() => setOpen(false)}>
               <span className="ico">{icon}</span>{label}
+              {to === '/mua-hang' && pendingPR.length > 0 && (
+                <span className={'nav-badge' + (urgentPR ? ' urgent' : '')} title={`${pendingPR.length} yêu cầu đang chờ xử lý`}>{pendingPR.length}</span>
+              )}
             </NavLink>
           ))}
         </nav>
