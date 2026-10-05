@@ -112,6 +112,31 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Trò chuyện: nhóm Toàn công ty (type 'all'), nhóm tự tạo, chat riêng 1-1
+    function chatMember(d) { return d.type == 'all' || me() in d.members; }
+    match /chats/{chatId} {
+      allow read: if isStaff() && (isAdmin() || chatMember(resource.data));
+      allow create: if isStaff() && request.resource.data.createdBy == me() && (
+        (chatId == 'all' && request.resource.data.type == 'all')
+        || (request.resource.data.type in ['group', 'dm'] && me() in request.resource.data.members));
+      allow update: if isStaff() && (isAdmin() || (chatMember(resource.data) && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMsg', 'updatedAt'])
+        || (resource.data.type == 'group' && resource.data.createdBy == me() && request.resource.data.createdBy == me())
+        || (resource.data.type == 'group' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'updatedAt'])
+            && request.resource.data.members.toSet() == resource.data.members.toSet().difference([me()].toSet())))));
+      allow delete: if isStaff() && (isAdmin() || resource.data.createdBy == me());
+      match /messages/{msgId} {
+        allow read: if isStaff() && (isAdmin() || chatMember(get(/databases/$(database)/documents/chats/$(chatId)).data));
+        allow create: if isStaff() && request.resource.data.by == me()
+          && chatMember(get(/databases/$(database)/documents/chats/$(chatId)).data);
+        allow delete: if isStaff() && (isAdmin() || resource.data.by == me()
+          || get(/databases/$(database)/documents/chats/$(chatId)).data.createdBy == me());
+      }
+    }
+    match /chatReads/{owner} {
+      allow read, write: if signedIn() && owner == me();
+    }
+
     // Báo cáo bán hàng Ecount theo tháng (phân tích): chỉ quản trị
     match /salesMonths/{id} {
       allow read, write: if isAdmin();
