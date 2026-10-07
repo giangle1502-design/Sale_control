@@ -216,3 +216,14 @@ tfoot td { font-weight: 700; background: #f8fafc; }
   .chat-page.show-list .chat-room { display: none; }
   .chat-back { display: inline-block; }
 }
+
+/* Cảnh báo trùng khách hàng */
+.warn-box { background: var(--amber-soft); border: 1px solid #f3c27a; border-left: 4px solid var(--amber); color: #6b4100; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+/* Bộ lọc nhiều mã hàng */
+.pf { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+.pf-btn { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.pf-btn.on { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+.pf-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; width: 420px; max-width: 92vw; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 8px; }
+.pf-pop > input { width: 100%; }
+.pf-tools { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 2px; }
+.pf-list { max-height: 320px; overflow: auto; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
