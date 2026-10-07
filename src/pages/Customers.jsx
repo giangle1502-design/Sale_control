@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { collection, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useApp } from '../context/AppContext';
@@ -12,6 +12,9 @@ import AddFieldButton from '../components/AddFieldButton';
 import { ActivityForm } from './Activities';
 import ProductMultiPicker, { splitCodes } from '../components/ProductMultiPicker';
 import { useProducts } from './Products';
+import ProductFilter from '../components/ProductFilter';
+import { compact, compareCustomer, loadIndex, removeIndex, syncIndex, usesCode, writeIndex } from '../lib/customerMatch';
+import { postToChat } from './Chat';
 import { isAutoCode, reserveCodes } from '../lib/codes';
 import { BuiltinInput, builtinType, confirmDelete, CustomFieldInputs, customValue, Empty, ErrorBox, Field, Modal, Stat } from '../components/ui';
 
@@ -134,7 +137,7 @@ export default function Customers() {
   const [history, setHistory] = useState(null);
   const [contactF, setContactF] = useState('');
   const [sortBy, setSortBy] = useState('name');
-  const [prod, setProd] = useState(''); // lọc theo mã hàng đang dùng
+  const [prods, setProds] = useState([]); // lọc theo nhiều mã hàng đang dùng
   const products = useProducts().data;
   const fields = config.customFields.customers || [];
   const { data, error } = useCustomers(staff);
@@ -154,16 +157,22 @@ export default function Customers() {
     }
   };
   const s = norm(search);
-  const p = norm(prod);
-  // Khách đang dùng mã hàng: khớp trong "Loại hạt đang dùng" hoặc ghi chú "Sản lượng" (VD: 5502: 50 tấn)
-  const usesProd = (c) => splitCodes(c.productsUsed).some((x) => norm(x).includes(p)) || norm(c.monthlyVolume).includes(p);
-  // Gợi ý mã hàng: danh mục Mặt hàng + các mã sale đã nhập ở khách
+  // Khách đang dùng mã hàng (so khớp mềm: "5502" ~ HDPE5502; tìm cả trong ghi chú Sản lượng)
+  const usesProd = (c) => prods.some((x) => usesCode(c, x, splitCodes));
+  // Danh sách để chọn: danh mục Mặt hàng + các mã sale nhập tự do ở khách, kèm số khách đang dùng
   const prodOptions = useMemo(() => {
     const m = new Map();
-    products.forEach((x) => x.code && m.set(norm(x.code), [String(x.code), x.name || '']));
-    data.forEach((c) => splitCodes(c.productsUsed).forEach((x) => { if (!m.has(norm(x))) m.set(norm(x), [x, '']); }));
-    return [...m.values()].sort((a, b) => a[0].localeCompare(b[0]));
+    products.forEach((x) => x.code && m.set(compact(x.code), { code: String(x.code), name: x.name || '', free: false }));
+    data.forEach((c) => splitCodes(c.productsUsed).forEach((x) => { const k = compact(x); if (k && !m.has(k)) m.set(k, { code: x, name: '', free: true }); }));
+    return [...m.values()].map((o) => ({ ...o, count: data.filter((c) => usesCode(c, o.code, splitCodes)).length }));
   }, [products, data]);
+  // Admin: đồng bộ chỉ mục khách hàng toàn công ty (dùng để cảnh báo trùng khách giữa các sale)
+  const synced = useRef(false);
+  useEffect(() => {
+    if (!isAdmin || staff || !data.length || synced.current) return;
+    synced.current = true;
+    syncIndex(data).catch(() => { synced.current = false; });
+  }, [isAdmin, staff, data.length]);
   const sorters = {
     name: (a, b) => (a.name || '').localeCompare(b.name || ''),
     stale: (a, b) => (inf(b).count ? inf(b).days : 1e9) - (inf(a).count ? inf(a).days : 1e9),
@@ -172,7 +181,7 @@ export default function Customers() {
   };
   const rows = data
     .filter((c) => (!stage || c.stage === stage) && (!ctype || (c.customerType || 'Khách mới') === ctype) && matchContact(c)
-      && (!p || usesProd(c))
+      && (!prods.length || usesProd(c))
       && (!s || [c.name, c.code, c.contact, c.phone, c.taxCode, c.productsUsed].some((v) => norm(v).includes(s))))
     .sort(sorters[sortBy] || sorters.name);
   const cnt = useMemo(() => {
@@ -251,12 +260,7 @@ export default function Customers() {
       </div>
       <div className="filters">
         <input placeholder="Tìm tên, mã KH, SĐT, MST, mã hàng…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <span className="nowrap" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <input list="cust-prod-list" placeholder="🔎 Lọc theo mã hàng (VD: 5502)" value={prod} onChange={(e) => setProd(e.target.value)}
-            style={{ width: 210, ...(prod ? { borderColor: 'var(--primary)', background: 'var(--primary-soft)' } : {}) }} />
-          {prod && <button className="btn sm" onClick={() => setProd('')} title="Bỏ lọc mã hàng">✕</button>}
-          <datalist id="cust-prod-list">{prodOptions.map(([code, name]) => <option key={code} value={code}>{name}</option>)}</datalist>
-        </span>
+        <ProductFilter options={prodOptions} value={prods} onChange={setProds} />
         <select value={ctype} onChange={(e) => setCtype(e.target.value)}>
           <option value="">Khách cũ + mới</option>{CUSTOMER_TYPES.map((x) => <option key={x}>{x}</option>)}
         </select>
@@ -277,7 +281,8 @@ export default function Customers() {
         )}
       </div>
       <ErrorBox error={error || acts.error} />
-      {prod && <div className="ok-box" style={{ marginBottom: 10 }}>Có <b>{rows.length}</b> khách hàng đang dùng mã <b>{prod}</b>{prodOptions.find(([c]) => norm(c) === p)?.[1] ? ` (${prodOptions.find(([c]) => norm(c) === p)[1]})` : ''}.</div>}
+      {prods.length > 0 && <div className="ok-box" style={{ marginBottom: 10 }}>Có <b>{rows.length}</b> khách hàng đang dùng <b>{prods.length === 1 ? 'mã' : 'một trong các mã'}</b>: <b>{prods.join(', ')}</b>
+        <span className="small"> (so khớp cả cách ghi tắt, VD "5502" ≈ HDPE5502)</span></div>}
       <div className="table-wrap">
         {rows.length === 0 ? <Empty /> : (
           <table>
@@ -302,7 +307,7 @@ export default function Customers() {
                     {(isAdmin || c.ownerEmail === email) && <>
                       <button className="btn sm primary" onClick={() => newActivity(c)}>📞 Ghi hoạt động</button>{' '}
                       <button className="btn sm" onClick={() => setEdit(c)}>Sửa</button>{' '}
-                      <button className="btn sm danger" onClick={() => confirmDelete('Xóa khách hàng này? (Đơn hàng, hoạt động cũ vẫn giữ)') && removeDoc('customers', c.id)}>Xóa</button>
+                      <button className="btn sm danger" onClick={() => confirmDelete('Xóa khách hàng này? (Đơn hàng, hoạt động cũ vẫn giữ)') && removeDoc('customers', c.id).then(() => removeIndex(c.id))}>Xóa</button>
                     </>}
                   </td>
                 </tr>
@@ -358,16 +363,41 @@ function CustomerForm({ initial, onClose }) {
   const [f, setF] = useState({ ...blank(), ...initial, custom: initial.custom || {} });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true); setErr('');
+  const [dup, setDup] = useState(null); // { level, list }
+  const [index, setIndex] = useState(null);
+  useEffect(() => { loadIndex().then(setIndex).catch(() => setIndex([])); }, []);
+  const set = (k) => (e) => { setF({ ...f, [k]: e.target.value }); if (['name', 'code', 'taxCode'].includes(k)) setDup(null); };
+
+  // Kiểm tra trùng / gần giống với khách của mọi sale (chỉ khi thêm mới hoặc đổi tên, mã, MST)
+  const changed = !f.id || f.name !== initial.name || f.code !== initial.code || f.taxCode !== initial.taxCode;
+  const checkDup = () => {
+    if (!changed || !index?.length) return null;
+    const me = { name: f.name, code: f.code, taxCode: f.taxCode, codeTyped: !!f.code?.trim() && !isAutoCode(f.code) };
+    const hits = index.filter((x) => x.id !== f.id).map((x) => ({ ...x, ...compareCustomer(me, x) })).filter((x) => x.level);
+    if (!hits.length) return null;
+    const exact = hits.filter((x) => x.level === 'exact');
+    return exact.length ? { level: 'exact', list: exact } : { level: 'similar', list: hits.slice(0, 8) };
+  };
+  const ownerOf = (x) => (x.o ? staffName(x.o) : 'chưa có sale');
+
+  const submit = async (e, confirmed = false) => {
+    e?.preventDefault();
+    setErr('');
+    const d = checkDup();
+    if (d && (d.level === 'exact' ? !(isAdmin && confirmed) : !confirmed)) { setDup(d); return; }
+    setBusy(true);
     try {
       const { id, createdAt, createdBy, updatedAt, updatedBy, ...rest } = f;
       if (!isAdmin) { delete rest.ownerEmail; delete rest.ownerName; }
       else if (rest.ownerEmail) rest.ownerName = staffName(rest.ownerEmail);
       if (!rest.code?.trim()) [rest.code] = await reserveCodes(1);
-      await saveDoc('customers', id, rest, profile);
+      const newId = await saveDoc('customers', id, rest, profile);
+      await writeIndex(newId, { ...rest, ownerEmail: rest.ownerEmail || initial.ownerEmail || profile.email });
+      if (d) {
+        const txt = `⚠️ ${profile.name || profile.email} vừa ${id ? 'sửa thông tin' : 'thêm'} khách hàng "${rest.name}"${rest.taxCode ? ' (MST ' + rest.taxCode + ')' : ''} — `
+          + `gần giống với: ${d.list.map((x) => `"${x.n}" (sale ${ownerOf(x)})`).join('; ')}. Mọi người kiểm tra giúp để tránh trùng khách.`;
+        await postToChat('all', txt, profile).catch(() => {});
+      }
       onClose();
     } catch (e2) { setErr(e2.message); setBusy(false); }
   };
@@ -412,10 +442,31 @@ function CustomerForm({ initial, onClose }) {
           <CustomFieldInputs fields={fields} value={f.custom} onChange={(custom) => setF({ ...f, custom })} />
         </div>
         <div style={{ marginTop: 10 }}><AddFieldButton module="customers" label="+ Thêm trường cho khách hàng" /></div>
+        {dup && (
+          <div className={dup.level === 'exact' ? 'error-box' : 'warn-box'} style={{ marginTop: 10 }}>
+            {dup.level === 'exact' ? (
+              <><b>⛔ Khách hàng này đã có trong hệ thống</b> — {dup.list.map((x, i) => (
+                <span key={x.id}>{i ? '; ' : ''}"<b>{x.n}</b>"{x.c ? ` (mã ${x.c})` : ''} do sale <b>{ownerOf(x)}</b> đang quản lý ({x.why})</span>))}.
+                <div>{isAdmin ? 'Bạn là quản trị: có thể vẫn lưu nếu chắc chắn.' : 'Bạn không được phép thêm trùng. Liên hệ quản lý nếu cần chuyển khách.'}</div></>
+            ) : (
+              <><b>⚠️ Khách hàng này gần giống với:</b>
+                <ul style={{ margin: '4px 0 4px 18px', padding: 0 }}>{dup.list.map((x) => (
+                  <li key={x.id}>"<b>{x.n}</b>"{x.c ? ` – mã ${x.c}` : ''}{x.t ? ` – MST ${x.t}` : ''} · sale <b>{ownerOf(x)}</b> <span className="small">({x.why})</span></li>))}</ul>
+                Hãy kiểm tra trước khi xác nhận. Nếu xác nhận, khách sẽ được lưu và <b>thông báo vào nhóm chat Toàn công ty</b> để mọi người nắm.</>
+            )}
+            <div className="form-actions" style={{ marginTop: 6 }}>
+              <button type="button" className="btn" onClick={() => setDup(null)}>← Quay lại kiểm tra</button>
+              {(dup.level === 'similar' || isAdmin) && (
+                <button type="button" className="btn primary" disabled={busy} onClick={() => submit(null, true)}>
+                  {dup.level === 'similar' ? 'Xác nhận lưu & báo nhóm chat' : 'Vẫn lưu (quản trị)'}</button>
+              )}
+            </div>
+          </div>
+        )}
         {err && <div className="error-box">{err}</div>}
         <div className="form-actions">
           <button type="button" className="btn" onClick={onClose}>Hủy</button>
-          <button className="btn primary" disabled={busy}>Lưu</button>
+          <button className="btn primary" disabled={busy || !!dup || index === null} title={index === null ? 'Đang tải danh sách để kiểm tra trùng…' : ''}>Lưu</button>
         </div>
       </form>
     </Modal>
