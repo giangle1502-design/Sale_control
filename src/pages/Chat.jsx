@@ -21,6 +21,17 @@ const hhmm = (t) => { const d = new Date(ms(t) || Date.now()); return d.toTimeSt
 const dayKey = (t) => { const d = new Date(ms(t) || Date.now()); return d.toISOString().slice(0, 10); };
 export const dmId = (a, b) => 'dm_' + [a, b].sort().join('__').replace(/[^a-z0-9_@.-]/gi, '-');
 
+// Gửi tin tự động vào 1 nhóm chat (VD cảnh báo trùng khách hàng vào nhóm Toàn công ty)
+export async function postToChat(chatId, text, profile) {
+  const ref = doc(db, 'chats', chatId);
+  const ex = await getDoc(ref);
+  if (!ex.exists() && chatId === 'all') {
+    await setDoc(ref, { type: 'all', name: 'Toàn công ty', members: [], createdBy: profile.email, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  }
+  await addDoc(collection(db, 'chats', chatId, 'messages'), { text, by: profile.email, byName: profile.name || '', at: serverTimestamp(), refs: [], auto: true });
+  await updateDoc(ref, { lastMsg: { text: text.slice(0, 120), by: profile.email, byName: profile.name || '', at: serverTimestamp() }, updatedAt: serverTimestamp() });
+}
+
 // Danh sách chat của tôi (realtime) + số chat có tin chưa đọc
 export function useMyChats() {
   const { email, isAdmin } = useApp();
