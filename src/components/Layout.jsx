@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { prUrgency, usePendingPurchases } from '../pages/PurchaseRequests';
 import { useChatAlerts } from '../pages/Chat';
+import { useColumnResize } from '../lib/colResize';
 
 const NAV = [
   ['/', '📊', 'Tổng quan'],
@@ -28,6 +29,8 @@ const ADMIN_NAV = [
 export default function Layout() {
   const { profile, isAdmin, isAccountant, logout, config } = useApp();
   const [open, setOpen] = useState(false);
+  const mainRef = useRef(null);
+  useColumnResize(mainRef);
   const pendingPR = usePendingPurchases();
   const chat = useChatAlerts();
   const urgentPR = pendingPR.some((r) => prUrgency(r));
@@ -54,7 +57,7 @@ export default function Layout() {
         </div>
       </aside>
       {open && <div className="side-bg" onClick={() => setOpen(false)} />}
-      <main>
+      <main ref={mainRef}>
         <button className="menu-btn" onClick={() => setOpen(true)}>☰</button>
         <Outlet />
       </main>
