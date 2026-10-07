@@ -89,6 +89,15 @@ tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: #fafcff; }
 td.num, th.num { text-align: right; white-space: nowrap; }
 tfoot td { font-weight: 700; background: #f8fafc; }
+/* Kéo chỉnh độ rộng cột */
+th .col-rs { position: absolute; top: 0; right: 0; width: 8px; height: 100%; cursor: col-resize; z-index: 2; touch-action: none; }
+th .col-rs::after { content: ''; position: absolute; top: 20%; bottom: 20%; right: 0; width: 1px; background: var(--line); }
+th:hover .col-rs::after { background: #b8c2d0; }
+th .col-rs:hover::after, th .col-rs.on::after { top: 0; bottom: 0; right: 0; width: 3px; background: var(--primary); }
+table.rs-fixed { table-layout: fixed; }
+table.rs-fixed th { white-space: normal; overflow-wrap: anywhere; }
+table.rs-fixed td { overflow: hidden; overflow-wrap: anywhere; }
+body.rs-dragging, body.rs-dragging * { cursor: col-resize !important; user-select: none !important; }
 .nowrap { white-space: nowrap; }
 .small { font-size: 12px; color: var(--muted); }
 
