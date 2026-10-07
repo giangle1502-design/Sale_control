@@ -133,6 +133,12 @@ service cloud.firestore {
           || get(/databases/$(database)/documents/chats/$(chatId)).data.createdBy == me());
       }
     }
+    // Chỉ mục khách hàng toàn công ty (tên, mã, MST, sale) — để cảnh báo trùng khách giữa các sale
+    match /customerIndex/{id} {
+      allow read: if isStaff();
+      allow create, update: if isStaff() && (isAdmin() || request.resource.data.o == me());
+      allow delete: if isStaff() && (isAdmin() || resource.data.o == me());
+    }
     match /chatReads/{owner} {
       allow read, write: if signedIn() && owner == me();
     }
