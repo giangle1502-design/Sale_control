@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { norm } from '../lib/utils';
 
-// Bộ lọc chọn nhiều mã hàng (có ô tìm kiếm). options: [{ code, name, count, free }]
-export default function ProductFilter({ options, value, onChange }) {
+// Bộ lọc chọn nhiều mã hàng (có ô tìm kiếm). options: [{ code, name, free }]; count(codes) → { code: số khách } (chỉ gọi khi mở)
+export default function ProductFilter({ options, count, value, onChange }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [onlyUsed, setOnlyUsed] = useState(true);
@@ -12,11 +12,13 @@ export default function ProductFilter({ options, value, onChange }) {
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
+  const counts = useMemo(() => (open ? count(options.map((o) => o.code)) : {}), [open, options, count]);
   const s = norm(q);
   const list = useMemo(() => options
+    .map((o) => ({ ...o, count: counts[o.code] || 0 }))
     .filter((o) => (!onlyUsed || o.count > 0 || value.includes(o.code)) && (!s || norm(o.code).includes(s) || norm(o.name).includes(s)))
     .sort((a, b) => (value.includes(b.code) - value.includes(a.code)) || b.count - a.count || a.code.localeCompare(b.code))
-    .slice(0, 150), [options, s, onlyUsed, value]);
+    .slice(0, 150), [options, counts, s, onlyUsed, value]);
   const toggle = (c) => onChange(value.includes(c) ? value.filter((x) => x !== c) : [...value, c]);
 
   return (
