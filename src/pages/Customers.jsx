@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { collection, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useApp } from '../context/AppContext';
@@ -13,7 +13,7 @@ import { ActivityForm } from './Activities';
 import ProductMultiPicker, { splitCodes } from '../components/ProductMultiPicker';
 import { useProducts } from './Products';
 import ProductFilter from '../components/ProductFilter';
-import { compact, compareCustomer, loadIndex, removeIndex, syncIndex, usesCode, writeIndex } from '../lib/customerMatch';
+import { compact, compareCustomer, countUsage, loadIndex, removeIndex, syncIndex, usesCode, writeIndex } from '../lib/customerMatch';
 import { postToChat } from './Chat';
 import { isAutoCode, reserveCodes } from '../lib/codes';
 import { BuiltinInput, builtinType, confirmDelete, CustomFieldInputs, customValue, Empty, ErrorBox, Field, Modal, Stat } from '../components/ui';
@@ -164,8 +164,10 @@ export default function Customers() {
     const m = new Map();
     products.forEach((x) => x.code && m.set(compact(x.code), { code: String(x.code), name: x.name || '', free: false }));
     data.forEach((c) => splitCodes(c.productsUsed).forEach((x) => { const k = compact(x); if (k && !m.has(k)) m.set(k, { code: x, name: '', free: true }); }));
-    return [...m.values()].map((o) => ({ ...o, count: data.filter((c) => usesCode(c, o.code, splitCodes)).length }));
+    return [...m.values()];
   }, [products, data]);
+  // Số khách dùng từng mã: chỉ tính khi mở bộ lọc (tránh treo trang khi danh sách khách lớn)
+  const countProd = useCallback((codes) => countUsage(codes, data, splitCodes), [data]);
   // Admin: đồng bộ chỉ mục khách hàng toàn công ty (dùng để cảnh báo trùng khách giữa các sale)
   const synced = useRef(false);
   useEffect(() => {
@@ -260,7 +262,7 @@ export default function Customers() {
       </div>
       <div className="filters">
         <input placeholder="Tìm tên, mã KH, SĐT, MST, mã hàng…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <ProductFilter options={prodOptions} value={prods} onChange={setProds} />
+        <ProductFilter options={prodOptions} count={countProd} value={prods} onChange={setProds} />
         <select value={ctype} onChange={(e) => setCtype(e.target.value)}>
           <option value="">Khách cũ + mới</option>{CUSTOMER_TYPES.map((x) => <option key={x}>{x}</option>)}
         </select>
@@ -392,11 +394,12 @@ function CustomerForm({ initial, onClose }) {
       else if (rest.ownerEmail) rest.ownerName = staffName(rest.ownerEmail);
       if (!rest.code?.trim()) [rest.code] = await reserveCodes(1);
       const newId = await saveDoc('customers', id, rest, profile);
-      await writeIndex(newId, { ...rest, ownerEmail: rest.ownerEmail || initial.ownerEmail || profile.email });
+      // Không chờ 2 bước phụ dưới đây để nút Lưu không bị treo nếu mạng chậm
+      writeIndex(newId, { ...rest, ownerEmail: rest.ownerEmail || initial.ownerEmail || profile.email });
       if (d) {
         const txt = `⚠️ ${profile.name || profile.email} vừa ${id ? 'sửa thông tin' : 'thêm'} khách hàng "${rest.name}"${rest.taxCode ? ' (MST ' + rest.taxCode + ')' : ''} — `
           + `gần giống với: ${d.list.map((x) => `"${x.n}" (sale ${ownerOf(x)})`).join('; ')}. Mọi người kiểm tra giúp để tránh trùng khách.`;
-        await postToChat('all', txt, profile).catch(() => {});
+        postToChat('all', txt, profile).catch(() => {});
       }
       onClose();
     } catch (e2) { setErr(e2.message); setBusy(false); }
