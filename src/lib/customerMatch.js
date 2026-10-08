@@ -13,17 +13,58 @@ const RESIN = /^(hdpe|lldpe|ldpe|pp|ps|abs|pet|pvc|eva|pc|pe|gpps|hips)/;
 const codeCore = (c) => { const r = c.replace(RESIN, ''); return r.length >= 3 && r !== c ? r : ''; };
 const hasDigit = (s) => /\d/.test(s);
 
+// Bộ nhớ đệm: chuẩn hóa mã chọn & mã của từng khách chỉ 1 lần (tránh treo trang khi có nhiều khách × nhiều mã)
+const selCache = new Map();
+function selInfo(sel) {
+  let v = selCache.get(sel);
+  if (!v) {
+    const s = compact(sel); const core = s ? codeCore(s) : '';
+    v = { s, core: core && hasDigit(core) ? core : '' };
+    if (selCache.size > 5000) selCache.clear();
+    selCache.set(sel, v);
+  }
+  return v;
+}
+const custCache = new WeakMap();
+function custInfo(c, splitCodes) {
+  let v = custCache.get(c);
+  if (!v || v.pu !== c.productsUsed || v.mv !== c.monthlyVolume) {
+    v = { pu: c.productsUsed, mv: c.monthlyVolume, tokens: splitCodes(c.productsUsed).map(compact).filter(Boolean), vol: compact(c.monthlyVolume) };
+    custCache.set(c, v);
+  }
+  return v;
+}
+
 // Khách c có đang dùng mã hàng sel không (so khớp mềm cho dữ liệu nhập tay)
 export function usesCode(c, sel, splitCodes) {
-  const s = compact(sel);
+  const { s, core } = selInfo(sel);
   if (!s) return false;
-  const core = codeCore(s);
-  const tokens = splitCodes(c.productsUsed).map(compact).filter(Boolean);
-  const hit = tokens.some((t) => t === s || t.includes(s) || (core && hasDigit(core) && (t === core || t.includes(core)))
-    || (t.length >= 4 && hasDigit(t) && s.includes(t)));
-  if (hit) return true;
-  const vol = compact(c.monthlyVolume);
-  return !!vol && (vol.includes(s) || (core && hasDigit(core) && vol.includes(core)));
+  const { tokens, vol } = custInfo(c, splitCodes);
+  for (const t of tokens) {
+    if (t === s || t.includes(s) || (core && t.includes(core)) || (t.length >= 4 && hasDigit(t) && s.includes(t))) return true;
+  }
+  return !!vol && (vol.includes(s) || (!!core && vol.includes(core)));
+}
+
+// Đếm số khách dùng từng mã (chuẩn hóa mỗi khách 1 lần) → { code: số khách }
+export function countUsage(codes, data, splitCodes) {
+  const prep = data.map((c) => custInfo(c, splitCodes));
+  const out = {};
+  codes.forEach((code) => {
+    const { s, core } = selInfo(code);
+    let n = 0;
+    if (s) {
+      for (const { tokens, vol } of prep) {
+        let hit = false;
+        for (const t of tokens) {
+          if (t === s || t.includes(s) || (core && t.includes(core)) || (t.length >= 4 && s.includes(t) && hasDigit(t))) { hit = true; break; }
+        }
+        if (hit || (vol && (vol.includes(s) || (core && vol.includes(core))))) n++;
+      }
+    }
+    out[code] = n;
+  });
+  return out;
 }
 
 // ---------------------------------------------------------------------------
