@@ -106,8 +106,8 @@ export function compareCustomer(a, b) {
 }
 
 // ---------------------------------------------------------------------------
-// Chỉ mục khách hàng: customerIndex/{customerId} = { n: tên, c: mã, t: MST, o: email sale }
-export const indexEntry = (c) => ({ n: c.name || '', c: c.code || '', t: c.taxCode || '', o: c.ownerEmail || '' });
+// Chỉ mục khách hàng: customerIndex/{customerId} = { n: tên, c: mã, t: MST, o: email sale, p: người liên hệ, a: địa chỉ }
+export const indexEntry = (c) => ({ n: c.name || '', c: c.code || '', t: c.taxCode || '', o: c.ownerEmail || '', p: c.contact || '', a: c.address || '' });
 export const writeIndex = (id, c) => setDoc(doc(db, 'customerIndex', id), indexEntry(c)).catch(() => {});
 export const removeIndex = (id) => deleteDoc(doc(db, 'customerIndex', id)).catch(() => {});
 export async function loadIndex() {
@@ -122,7 +122,7 @@ export async function syncIndex(customers) {
   const ops = [];
   customers.forEach((c) => {
     const e = indexEntry(c); const o = byId.get(c.id);
-    if (!o || o.n !== e.n || o.c !== e.c || o.t !== e.t || o.o !== e.o) ops.push(['set', c.id, e]);
+    if (!o || ['n', 'c', 't', 'o', 'p', 'a'].some((k) => (o[k] || '') !== e[k])) ops.push(['set', c.id, e]);
   });
   idx.forEach((x) => { if (!live.has(x.id)) ops.push(['del', x.id]); });
   for (let i = 0; i < ops.length; i += 400) {
@@ -131,4 +131,29 @@ export async function syncIndex(customers) {
     await b.commit();
   }
   return ops.length;
+}
+
+// Tra cứu khách toàn công ty theo từ khóa (tên, mã, MST, người liên hệ, địa chỉ) — có so tên gần giống
+export function searchIndex(index, q, max = 50) {
+  const s = norm(q);
+  if (s.length < 2) return [];
+  const words = s.split(' ');
+  const cq = compact(q);
+  const out = [];
+  index.forEach((x) => {
+    const n = norm(x.n);
+    let score = 0; let why = '';
+    if (n === s) { score = 100; why = 'trùng tên'; }
+    else if (n.includes(s)) { score = 80; why = 'tên có chứa'; }
+    else if (words.length > 1 && words.every((w) => n.split(' ').includes(w))) { score = 70; why = 'tên có đủ các chữ'; }
+    else if (cq.length >= 3 && (compact(x.c) === cq || (cq.length >= 8 && compact(x.t) === cq))) { score = 90; why = compact(x.c) === cq ? 'trùng mã KH' : 'trùng MST'; }
+    else if (cq.length >= 4 && (compact(x.c).includes(cq) || compact(x.t).includes(cq))) { score = 60; why = 'mã / MST có chứa'; }
+    else {
+      const r = compareCustomer({ name: q }, x);
+      if (r.level) { score = 50; why = r.why; }
+      else if (s.length >= 3 && (norm(x.p).includes(s) || norm(x.a).includes(s))) { score = 30; why = norm(x.p).includes(s) ? 'người liên hệ' : 'địa chỉ'; }
+    }
+    if (score) out.push({ ...x, score, why });
+  });
+  return out.sort((a, b) => b.score - a.score || a.n.localeCompare(b.n)).slice(0, max);
 }
