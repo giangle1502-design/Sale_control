@@ -15,6 +15,7 @@ import { useProducts } from './Products';
 import ProductFilter from '../components/ProductFilter';
 import { compact, compareCustomer, countUsage, loadIndex, removeIndex, syncIndex, usesCode, writeIndex } from '../lib/customerMatch';
 import { postToChat } from './Chat';
+import CustomerLookup, { LookupResults } from '../components/CustomerLookup';
 import { isAutoCode, reserveCodes } from '../lib/codes';
 import { BuiltinInput, builtinType, confirmDelete, CustomFieldInputs, customValue, Empty, ErrorBox, Field, Modal, Stat } from '../components/ui';
 
@@ -133,6 +134,7 @@ export default function Customers() {
   const [ctype, setCtype] = useState('');
   const [edit, setEdit] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [lookup, setLookup] = useState(false);
   const [activity, setActivity] = useState(null);
   const [history, setHistory] = useState(null);
   const [contactF, setContactF] = useState('');
@@ -239,6 +241,7 @@ export default function Customers() {
           <button className="btn" onClick={doTemplate}>File mẫu</button>
           <button className="btn" onClick={() => setImporting(true)}>⬆ Nhập Excel</button>
           <button className="btn" onClick={doExport}>⬇ Xuất Excel{isAdmin ? ' (phân bổ)' : ''}</button>
+          <button className="btn" onClick={() => setLookup(true)} title="Kiểm tra khách đã có của tất cả sale trước khi thêm">🔍 Tra cứu khách toàn công ty</button>
           <button className="btn primary" onClick={() => setEdit(blank())}>+ Thêm khách hàng</button>
         </div>
       </div>
@@ -319,6 +322,7 @@ export default function Customers() {
         )}
       </div>
       {edit && <CustomerForm initial={edit} onClose={() => setEdit(null)} />}
+      {lookup && <CustomerLookup onClose={() => setLookup(false)} onAdd={(name) => { setLookup(false); setEdit({ ...blank(), name }); }} />}
       {activity && <ActivityForm initial={activity} onClose={() => setActivity(null)} profile={profile} config={config} fields={config.customFields.activities || []} />}
       {history && <HistoryModal customer={history} info={inf(history)} staffName={staffName} isAdmin={isAdmin}
         onAdd={() => { const c = history; setHistory(null); newActivity(c); }} onClose={() => setHistory(null)} />}
@@ -408,7 +412,14 @@ function CustomerForm({ initial, onClose }) {
     <Modal title={f.id ? 'Sửa khách hàng' : 'Thêm khách hàng'} onClose={onClose}>
       <form onSubmit={submit}>
         <div className="form-grid">
-          <Field label="Tên khách hàng / công ty" required full><input value={f.name} onChange={set('name')} required /></Field>
+          <Field label="Tên khách hàng / công ty" required full><input value={f.name} onChange={set('name')} required />
+            {f.name !== initial.name && f.name.trim().length >= 3 && (
+              <div style={{ marginTop: 6 }}>
+                <div className="small" style={{ marginBottom: 4 }}>🔍 Khách đã có trên hệ thống (tất cả sale) khớp với tên này:</div>
+                <LookupResults index={index} q={f.name} max={8} compact />
+              </div>
+            )}
+          </Field>
           <Field label="Mã KH">
             <input value={f.code} onChange={set('code')} placeholder="Để trống → tự tạo mã (VD: KH000001)" />
             <small className="small">Khách mới đang chào: để trống, hệ thống tự cấp mã. Khách đã chốt: nhập mã theo phần mềm kế toán.</small>
