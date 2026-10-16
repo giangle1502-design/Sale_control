@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  createUserWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup,
+  createUserWithEmailAndPassword, getRedirectResult, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect,
 } from 'firebase/auth';
-import { auth, googleProvider } from '../firebase';
+import { auth, googleProvider, inAppBrowser, isMobile, sameDomainAuth } from '../firebase';
 
 const MSG = {
   'auth/invalid-credential': 'Sai email hoặc mật khẩu.',
@@ -19,10 +19,24 @@ export default function Login() {
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const explain = (e) => MSG[e.code]
+    || (/initial state|storage/i.test(e.message || '') ? 'Trình duyệt chặn đăng nhập Google. Mở link bằng Chrome hoặc Safari (không mở trong Zalo/Facebook) rồi thử lại, hoặc đăng nhập bằng email + mật khẩu.' : e.message);
   const run = async (fn) => {
     setErr(''); setInfo(''); setBusy(true);
-    try { await fn(); } catch (e) { setErr(MSG[e.code] || e.message); }
+    try { await fn(); } catch (e) {
+      if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') setErr(explain(e));
+    }
     setBusy(false);
+  };
+  // Kết quả đăng nhập sau khi quay về từ trang Google (điện thoại)
+  useEffect(() => { getRedirectResult(auth).catch((e) => setErr(explain(e))); }, []);
+  // Điện thoại dùng chuyển trang (ổn định hơn cửa sổ bật lên); máy tính dùng cửa sổ bật lên, bị chặn thì chuyển trang
+  const google = async () => {
+    if (sameDomainAuth) return signInWithRedirect(auth, googleProvider);
+    try { await signInWithPopup(auth, googleProvider); } catch (e) {
+      if (e.code === 'auth/popup-blocked' || (isMobile && e.code === 'auth/operation-not-supported-in-this-environment')) return signInWithRedirect(auth, googleProvider);
+      throw e;
+    }
   };
   const submit = (e) => {
     e.preventDefault();
@@ -36,7 +50,8 @@ export default function Login() {
       <form className="card narrow" onSubmit={submit}>
         <h2>Quản lý công việc Sale</h2>
         <p className="muted">{mode === 'login' ? 'Đăng nhập để tiếp tục' : 'Tạo mật khẩu cho email đã được quản lý cấp quyền'}</p>
-        <button type="button" className="btn google" disabled={busy} onClick={() => run(() => signInWithPopup(auth, googleProvider))}>
+        {inAppBrowser && <div className="error-box">Bạn đang mở trong Zalo/Facebook — Google không cho đăng nhập ở đây. Bấm ⋮ hoặc ··· → “Mở bằng trình duyệt” (Chrome/Safari), hoặc đăng nhập bằng email + mật khẩu bên dưới.</div>}
+        <button type="button" className="btn google" disabled={busy} onClick={() => run(google)}>
           Đăng nhập bằng Google
         </button>
         <div className="or">hoặc</div>
