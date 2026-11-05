@@ -55,6 +55,7 @@ export default function Layout() {
           <div><b>{profile.name}</b><small>{profile.email}</small>
             <small className="role">{isAdmin ? 'Quản trị' : isAccountant ? 'Kế toán' : 'Nhân viên sale'}</small></div>
           {isAdmin && <a className="btn ghost sm" href="https://sale-hat-mau.vercel.app" title="Chuyển sang app Sale Hạt Màu">⇄ Sale Hạt Màu</a>}
+          <a className="btn ghost sm" href="https://quanlynhansu-omega.vercel.app" title="Nghỉ phép, đặt xe, lịch xe trống">⇄ Nhân sự (nghỉ phép, đặt xe)</a>
           <button className="btn ghost sm" onClick={logout}>Đăng xuất</button>
         </div>
       </aside>
