@@ -212,11 +212,13 @@ service cloud.firestore {
       allow read: if isEmp();
       allow write: if hasPerm('manageFleet', ['hanh_chinh', 'admin']);
     }
+    // Chế độ "ai đặt trước được xe" (Phân quyền & luồng duyệt → Đặt xe)
+    function bookingAuto() { return exists(permPath()) && get(permPath()).data.get('bookingMode', 'approval') == 'auto'; }
     // Đặt xe: mọi nhân viên xem (để biết xe trống); người duyệt nằm trong watchers
     match /vehicleBookings/{id} {
       allow read: if isEmp();
       allow create: if isEmp() && ownsNew() && (request.resource.data.status == 'Chờ duyệt'
-        || (request.resource.data.status == 'Đã duyệt' && (hasPerm('noApprovalBooking', ['giam_doc'])
+        || (request.resource.data.status == 'Đã duyệt' && (bookingAuto() || hasPerm('noApprovalBooking', ['giam_doc'])
             || (request.resource.data.forDirector == true && hasPerm('bookForDirector', ['tai_xe', 'hanh_chinh', 'admin'])))));
       allow update: if isEmp() && (hasRole(['admin']) || hasPerm('manageFleet', ['hanh_chinh', 'admin'])
         || (me() in resource.data.get('watchers', []) && !ownsExisting())
