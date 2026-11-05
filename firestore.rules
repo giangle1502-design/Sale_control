@@ -223,6 +223,44 @@ service cloud.firestore {
       allow delete: if isEmp() && (hasRole(['admin', 'giam_doc', 'ke_toan_truong']) || resource.data.createdBy == me());
     }
 
+    // Chấm công: nhân viên tự xác nhận đi làm; cấp trên trực tiếp (managerEmail) xác nhận / chấm thay; tháng khóa sổ thì chỉ HR sửa
+    function attOpen(m) {
+      return !exists(/databases/$(database)/documents/attendanceLocks/$(m))
+        || get(/databases/$(database)/documents/attendanceLocks/$(m)).data.locked != true
+        || hasRole(['nhan_su', 'admin']);
+    }
+    match /attendance/{id} {
+      allow read: if isEmp() && (hasRole(['nhan_su', 'giam_doc', 'pho_giam_doc', 'admin']) || me() in resource.data.watchers);
+      allow create: if isEmp() && attOpen(request.resource.data.month) && (hasRole(['nhan_su', 'giam_doc', 'pho_giam_doc', 'admin'])
+        || (ownsNew() && request.resource.data.status == 'Chờ xác nhận' && request.resource.data.mark == '')
+        || (!ownsNew() && request.resource.data.managerEmail == me()));
+      allow update: if isEmp() && attOpen(resource.data.month) && (hasRole(['nhan_su', 'giam_doc', 'pho_giam_doc', 'admin'])
+        || (!ownsExisting() && resource.data.managerEmail == me())
+        || (ownsExisting() && resource.data.status == 'Chờ xác nhận' && request.resource.data.status == 'Chờ xác nhận' && request.resource.data.mark == ''));
+      allow delete: if hasRole(['admin', 'nhan_su']);
+    }
+    match /attendanceLocks/{m} {
+      allow read: if isEmp();
+      allow write: if hasRole(['nhan_su', 'admin']);
+    }
+    // Trường dữ liệu tùy chỉnh: HR & quản trị định nghĩa
+    match /hrFields/{entity} {
+      allow read: if isEmp();
+      allow write: if hasRole(['admin', 'nhan_su']);
+    }
+    // Danh sách chọn dùng chung: mọi nhân viên được thêm lựa chọn mới (nút ＋)
+    match /hrOptions/{key} {
+      allow read: if isEmp();
+      allow create: if isEmp();
+      allow update: if isEmp() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['values', 'updatedAt', 'updatedBy'])
+        && request.resource.data.values.hasAll(resource.data.values);
+      allow update, delete: if hasRole(['admin', 'nhan_su']);
+    }
+    // Bảng lương: CHỈ Giám đốc xem và sửa
+    match /payrollProfiles/{email} { allow read, write: if hasRole(['giam_doc']); }
+    match /payrollSettings/{id} { allow read, write: if hasRole(['giam_doc']); }
+    match /payrollPeriods/{m} { allow read, write: if hasRole(['giam_doc']); }
+
     // Nhật ký kiểm toán: chỉ thêm, không sửa/xóa
     match /auditLogs/{id} {
       allow create: if isEmp() && request.resource.data.by == me();
