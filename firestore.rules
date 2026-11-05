@@ -153,5 +153,69 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if false;
     }
+
+    // =====================================================================
+    // APP NHÂN SỰ – HÀNH CHÍNH (repo hr-app) — dùng chung project này
+    // =====================================================================
+    function hrEmpPath() { return /databases/$(database)/documents/hrEmployees/$(me()); }
+    function isEmp() {
+      return signedIn() && (me() in superAdmins()
+        || (exists(hrEmpPath()) && get(hrEmpPath()).data.get('status', '') != 'Đã nghỉ việc'));
+    }
+    function hasRole(rs) {
+      return signedIn() && (me() in superAdmins()
+        || (exists(hrEmpPath()) && get(hrEmpPath()).data.get('roles', []).hasAny(rs)));
+    }
+    function fleetApprover() {
+      return exists(/databases/$(database)/documents/hrSettings/fleet)
+        && me() in get(/databases/$(database)/documents/hrSettings/fleet).data.get('approverEmails', []);
+    }
+
+    // Hồ sơ nhân viên: mọi nhân viên xem danh bạ; HR & quản trị sửa (chỉ quản trị cấp vai trò Quản trị)
+    match /hrEmployees/{email} {
+      allow read: if isEmp() || (signedIn() && email == me());
+      allow create, update: if hasRole(['admin'])
+        || (hasRole(['nhan_su']) && !('admin' in request.resource.data.get('roles', []))
+            && (resource == null || !('admin' in resource.data.get('roles', []))));
+      allow delete: if hasRole(['admin']);
+    }
+    match /hrDepartments/{id} {
+      allow read: if isEmp();
+      allow write: if hasRole(['admin', 'nhan_su']);
+    }
+    // Cài đặt: 'fleet' (người được duyệt đặt xe) chỉ Giám đốc sửa
+    match /hrSettings/{id} {
+      allow read: if isEmp();
+      allow write: if id == 'fleet' ? hasRole(['giam_doc', 'admin']) : hasRole(['admin', 'nhan_su']);
+    }
+    // Đơn nghỉ phép: chủ đơn + người duyệt đích danh (watchers) + HR/Giám đốc/Phó GĐ
+    match /leaveRequests/{id} {
+      allow read: if isEmp() && (hasRole(['nhan_su', 'giam_doc', 'pho_giam_doc', 'admin']) || me() in resource.data.watchers);
+      allow create: if isEmp() && ownsNew() && me() in request.resource.data.watchers
+        && request.resource.data.status == 'Chờ duyệt';
+      allow update: if isEmp() && (hasRole(['nhan_su', 'giam_doc', 'admin'])
+        || (me() in resource.data.watchers && !ownsExisting())
+        || (ownsExisting() && ownsNew() && request.resource.data.status in ['Chờ duyệt', 'Đang duyệt', 'Đã hủy']));
+      allow delete: if hasRole(['admin']);
+    }
+    // Xe: mọi nhân viên xem; Hành chính & quản trị sửa
+    match /vehicles/{id} {
+      allow read: if isEmp();
+      allow write: if hasRole(['admin', 'hanh_chinh']);
+    }
+    // Đặt xe: mọi nhân viên xem (để biết xe trống); Giám đốc hoặc người được phân quyền duyệt
+    match /vehicleBookings/{id} {
+      allow read: if isEmp();
+      allow create: if isEmp() && ownsNew() && request.resource.data.status == 'Chờ duyệt';
+      allow update: if isEmp() && (hasRole(['giam_doc', 'admin', 'hanh_chinh']) || (fleetApprover() && !ownsExisting())
+        || (ownsExisting() && ownsNew() && (request.resource.data.status != 'Đã duyệt' || resource.data.status == 'Đã duyệt')));
+      allow delete: if hasRole(['admin']);
+    }
+    // Nhật ký kiểm toán: chỉ thêm, không sửa/xóa
+    match /auditLogs/{id} {
+      allow create: if isEmp() && request.resource.data.by == me();
+      allow read: if hasRole(['admin', 'giam_doc']);
+      allow update, delete: if false;
+    }
   }
 }
