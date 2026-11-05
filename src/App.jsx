@@ -20,6 +20,7 @@ import PurchaseRequests from './pages/PurchaseRequests';
 import Shipments from './pages/Shipments';
 import Inventory from './pages/Inventory';
 import Chat from './pages/Chat';
+import Gifts from './pages/Gifts';
 
 export default function App() {
   const { user, allowed, isAdmin, isAccountant, loading, logout, email } = useApp();
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="don-hang" element={<Orders />} />
         <Route path="cong-no" element={<Debts />} />
         <Route path="cong-viec" element={<Tasks />} />
+        <Route path="qua-tang" element={<Gifts />} />
         <Route path="mua-hang" element={<PurchaseRequests />} />
         <Route path="hang-da-xuat" element={<Shipments />} />
         <Route path="ton-kho" element={<Inventory />} />

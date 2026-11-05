@@ -17,6 +17,7 @@ const NAV = [
   ['/cong-no', '💰', 'Công nợ & Thu tiền'],
   ['/cong-viec', '✅', 'Việc được giao'],
   ['/mua-hang', '🛒', 'Yêu cầu mua hàng'],
+  ['/qua-tang', '🎁', 'Quà tặng KH'],
   ['/khach-hang', '👥', 'Khách hàng'],
   ['/mat-hang', '🏷️', 'Mặt hàng'],
 ];
