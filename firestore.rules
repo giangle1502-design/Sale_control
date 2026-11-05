@@ -97,7 +97,7 @@ service cloud.firestore {
 
     // Hàng đã xuất (Ecount, nhập theo ngày/tuần): admin xem & nhập; sale xem dòng của mình
     match /shipments/{id} {
-      allow read: if isStaff() && (isAdmin() || ownsExisting());
+      allow read: if (isStaff() && (isAdmin() || ownsExisting())) || hasRole(['giam_doc']);
       allow write: if isAdmin();
     }
 
