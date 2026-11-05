@@ -211,6 +211,18 @@ service cloud.firestore {
         || (ownsExisting() && ownsNew() && (request.resource.data.status != 'Đã duyệt' || resource.data.status == 'Đã duyệt')));
       allow delete: if hasRole(['admin']);
     }
+    // Kế hoạch công việc: người thực hiện, người giao, cấp trên (watchers) + lãnh đạo/KTT
+    match /workTasks/{id} {
+      allow read: if isEmp() && (hasRole(['giam_doc', 'pho_giam_doc', 'ke_toan_truong', 'admin']) || me() in resource.data.watchers);
+      allow create: if isEmp() && request.resource.data.createdBy == me() && me() in request.resource.data.watchers
+        && (request.resource.data.ownerEmail == me() || hasRole(['giam_doc', 'pho_giam_doc', 'ke_toan_truong', 'admin', 'truong_phong']));
+      allow update: if isEmp() && (hasRole(['giam_doc', 'pho_giam_doc', 'ke_toan_truong', 'admin'])
+        || resource.data.createdBy == me()
+        || (me() in resource.data.watchers && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['completions', 'status', 'progress', 'completedDate', 'doneNote', 'updatedAt', 'updatedBy'])));
+      allow delete: if isEmp() && (hasRole(['admin', 'giam_doc', 'ke_toan_truong']) || resource.data.createdBy == me());
+    }
+
     // Nhật ký kiểm toán: chỉ thêm, không sửa/xóa
     match /auditLogs/{id} {
       allow create: if isEmp() && request.resource.data.by == me();
