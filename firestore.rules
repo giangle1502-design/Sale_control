@@ -97,7 +97,7 @@ service cloud.firestore {
 
     // Hàng đã xuất (Ecount, nhập theo ngày/tuần): admin xem & nhập; sale xem dòng của mình
     match /shipments/{id} {
-      allow read: if (isStaff() && (isAdmin() || ownsExisting())) || hasRole(['giam_doc']);
+      allow read: if (isStaff() && (isAdmin() || ownsExisting())) || hasPerm('payroll', ['giam_doc']);
       allow write: if isAdmin();
     }
 
@@ -156,100 +156,111 @@ service cloud.firestore {
 
     // =====================================================================
     // APP NHÂN SỰ – HÀNH CHÍNH (repo hr-app) — dùng chung project này
+    // Quyền theo chức năng đọc từ hrSettings/permissions (trang "Phân quyền & luồng duyệt").
+    // Giá trị mặc định trong hasPerm(...) phải khớp src/lib/perms.js của app Nhân sự.
     // =====================================================================
     function hrEmpPath() { return /databases/$(database)/documents/hrEmployees/$(me()); }
+    function permPath() { return /databases/$(database)/documents/hrSettings/permissions; }
     function isEmp() {
       return signedIn() && (me() in superAdmins()
         || (exists(hrEmpPath()) && get(hrEmpPath()).data.get('status', '') != 'Đã nghỉ việc'));
     }
+    function myRoles() { return get(hrEmpPath()).data.get('roles', []); }
     function hasRole(rs) {
-      return signedIn() && (me() in superAdmins()
-        || (exists(hrEmpPath()) && get(hrEmpPath()).data.get('roles', []).hasAny(rs)));
+      return signedIn() && (me() in superAdmins() || (exists(hrEmpPath()) && myRoles().hasAny(rs)));
     }
-    function fleetApprover() {
-      return exists(/databases/$(database)/documents/hrSettings/fleet)
-        && me() in get(/databases/$(database)/documents/hrSettings/fleet).data.get('approverEmails', []);
+    function permRoles(k, d) {
+      return exists(permPath()) ? get(permPath()).data.get('map', {}).get(k, d) : d;
+    }
+    function hasPerm(k, d) {
+      return signedIn() && (me() in superAdmins()
+        || (exists(hrEmpPath()) && get(hrEmpPath()).data.get('status', '') != 'Đã nghỉ việc'
+            && permRoles(k, d).hasAny(myRoles().concat(['*']))));
     }
 
-    // Hồ sơ nhân viên: mọi nhân viên xem danh bạ; HR & quản trị sửa (chỉ quản trị cấp vai trò Quản trị)
+    // Hồ sơ nhân viên: mọi nhân viên xem danh bạ; người có quyền "Quản lý nhân viên" sửa (chỉ quản trị cấp vai trò Quản trị)
     match /hrEmployees/{email} {
       allow read: if isEmp() || (signedIn() && email == me());
       allow create, update: if hasRole(['admin'])
-        || (hasRole(['nhan_su']) && !('admin' in request.resource.data.get('roles', []))
-            && (resource == null || !('admin' in resource.data.get('roles', []))));
+        || (hasPerm('manageEmployees', ['nhan_su', 'admin']) && !('admin' in request.resource.data.get('roles', []))
+            && (resource == null || !('admin' in resource.data.get('roles', []))))
+        || (hasPerm('editLeaveBalance', ['nhan_su', 'admin']) && resource != null
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leaveOpenYear', 'leaveOpenDate', 'leaveOpenLeft', 'leaveAdjust', 'updatedAt', 'updatedBy']));
       allow delete: if hasRole(['admin']);
     }
     match /hrDepartments/{id} {
       allow read: if isEmp();
-      allow write: if hasRole(['admin', 'nhan_su']);
+      allow write: if hasPerm('manageEmployees', ['nhan_su', 'admin']);
     }
-    // Cài đặt: 'fleet' (người được duyệt đặt xe) chỉ Giám đốc sửa
+    // Cài đặt: 'permissions' (phân quyền, luồng duyệt) và 'fleet' cần quyền Phân quyền
     match /hrSettings/{id} {
       allow read: if isEmp();
-      allow write: if id == 'fleet' ? hasRole(['giam_doc', 'admin']) : hasRole(['admin', 'nhan_su']);
+      allow write: if (id == 'permissions' || id == 'fleet') ? hasPerm('managePerms', ['admin', 'giam_doc']) : hasPerm('manageSettings', ['nhan_su', 'admin']);
     }
-    // Đơn nghỉ phép: chủ đơn + người duyệt đích danh (watchers) + HR/Giám đốc/Phó GĐ
+    // Đơn nghỉ phép: chủ đơn + mọi người duyệt của đơn (watchers) + người có quyền xem tất cả
     match /leaveRequests/{id} {
-      allow read: if isEmp() && (hasRole(['nhan_su', 'giam_doc', 'pho_giam_doc', 'admin']) || me() in resource.data.watchers);
+      allow read: if isEmp() && (hasPerm('viewAllLeave', ['nhan_su', 'giam_doc', 'pho_giam_doc', 'admin']) || me() in resource.data.watchers);
       allow create: if isEmp() && ownsNew() && me() in request.resource.data.watchers
         && request.resource.data.status == 'Chờ duyệt';
-      allow update: if isEmp() && (hasRole(['nhan_su', 'giam_doc', 'admin'])
+      allow update: if isEmp() && (hasRole(['admin'])
         || (me() in resource.data.watchers && !ownsExisting())
         || (ownsExisting() && ownsNew() && request.resource.data.status in ['Chờ duyệt', 'Đang duyệt', 'Đã hủy']));
       allow delete: if hasRole(['admin']);
     }
-    // Xe: mọi nhân viên xem; Hành chính & quản trị sửa
+    // Xe
     match /vehicles/{id} {
       allow read: if isEmp();
-      allow write: if hasRole(['admin', 'hanh_chinh']);
+      allow write: if hasPerm('manageFleet', ['hanh_chinh', 'admin']);
     }
-    // Đặt xe: mọi nhân viên xem (để biết xe trống); Giám đốc hoặc người được phân quyền duyệt
+    // Đặt xe: mọi nhân viên xem (để biết xe trống); người duyệt nằm trong watchers
     match /vehicleBookings/{id} {
       allow read: if isEmp();
-      // Chuyến của Giám đốc (tài xế / hành chính đặt, hoặc Giám đốc tự đặt) được giữ xe ngay, không cần duyệt
       allow create: if isEmp() && ownsNew() && (request.resource.data.status == 'Chờ duyệt'
-        || (request.resource.data.status == 'Đã duyệt' && (hasRole(['giam_doc'])
-            || (request.resource.data.forDirector == true && hasRole(['tai_xe', 'hanh_chinh', 'admin'])))));
-      allow update: if isEmp() && (hasRole(['giam_doc', 'admin', 'hanh_chinh']) || (fleetApprover() && !ownsExisting())
+        || (request.resource.data.status == 'Đã duyệt' && (hasPerm('noApprovalBooking', ['giam_doc'])
+            || (request.resource.data.forDirector == true && hasPerm('bookForDirector', ['tai_xe', 'hanh_chinh', 'admin'])))));
+      allow update: if isEmp() && (hasRole(['admin']) || hasPerm('manageFleet', ['hanh_chinh', 'admin'])
+        || (me() in resource.data.get('watchers', []) && !ownsExisting())
         || (ownsExisting() && ownsNew() && (request.resource.data.status != 'Đã duyệt' || resource.data.status == 'Đã duyệt')));
       allow delete: if hasRole(['admin']);
     }
-    // Kế hoạch công việc: người thực hiện, người giao, cấp trên (watchers) + lãnh đạo/KTT
+    // Kế hoạch công việc
     match /workTasks/{id} {
-      allow read: if isEmp() && (hasRole(['giam_doc', 'pho_giam_doc', 'ke_toan_truong', 'admin']) || me() in resource.data.watchers);
+      allow read: if isEmp() && (hasPerm('tasksAll', ['giam_doc', 'pho_giam_doc', 'ke_toan_truong', 'admin']) || me() in resource.data.watchers);
       allow create: if isEmp() && request.resource.data.createdBy == me() && me() in request.resource.data.watchers
-        && (request.resource.data.ownerEmail == me() || hasRole(['giam_doc', 'pho_giam_doc', 'ke_toan_truong', 'admin', 'truong_phong']));
-      allow update: if isEmp() && (hasRole(['giam_doc', 'pho_giam_doc', 'ke_toan_truong', 'admin'])
+        && (request.resource.data.ownerEmail == me() || hasPerm('tasksAll', ['giam_doc', 'pho_giam_doc', 'ke_toan_truong', 'admin'])
+            || hasPerm('tasksAssignTeam', ['truong_phong']));
+      allow update: if isEmp() && (hasPerm('tasksAll', ['giam_doc', 'pho_giam_doc', 'ke_toan_truong', 'admin'])
         || resource.data.createdBy == me()
         || (me() in resource.data.watchers && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(['completions', 'status', 'progress', 'completedDate', 'doneNote', 'updatedAt', 'updatedBy'])));
-      allow delete: if isEmp() && (hasRole(['admin', 'giam_doc', 'ke_toan_truong']) || resource.data.createdBy == me());
+      allow delete: if isEmp() && (hasPerm('tasksAll', ['giam_doc', 'pho_giam_doc', 'ke_toan_truong', 'admin']) || resource.data.createdBy == me());
     }
 
-    // Chấm công: nhân viên tự xác nhận đi làm; cấp trên trực tiếp (managerEmail) xác nhận / chấm thay; tháng khóa sổ thì chỉ HR sửa
+    // Chấm công: nhân viên tự xác nhận đi làm; cấp trên trực tiếp (managerEmail) xác nhận / chấm thay; tháng khóa sổ thì chỉ người có quyền khóa sổ sửa
     function attOpen(m) {
       return !exists(/databases/$(database)/documents/attendanceLocks/$(m))
         || get(/databases/$(database)/documents/attendanceLocks/$(m)).data.locked != true
-        || hasRole(['nhan_su', 'admin']);
+        || hasPerm('lockAttendance', ['nhan_su', 'admin']);
     }
+    function attAll() { return hasPerm('attendanceAll', ['nhan_su', 'giam_doc', 'pho_giam_doc', 'admin']); }
     match /attendance/{id} {
-      allow read: if isEmp() && (hasRole(['nhan_su', 'giam_doc', 'pho_giam_doc', 'admin']) || me() in resource.data.watchers);
-      allow create: if isEmp() && attOpen(request.resource.data.month) && (hasRole(['nhan_su', 'giam_doc', 'pho_giam_doc', 'admin'])
+      allow read: if isEmp() && (attAll() || me() in resource.data.watchers);
+      allow create: if isEmp() && attOpen(request.resource.data.month) && (attAll()
         || (ownsNew() && request.resource.data.status == 'Chờ xác nhận' && request.resource.data.mark == '')
         || (!ownsNew() && request.resource.data.managerEmail == me()));
-      allow update: if isEmp() && attOpen(resource.data.month) && (hasRole(['nhan_su', 'giam_doc', 'pho_giam_doc', 'admin'])
+      allow update: if isEmp() && attOpen(resource.data.month) && (attAll()
         || (!ownsExisting() && resource.data.managerEmail == me())
         || (ownsExisting() && resource.data.status == 'Chờ xác nhận' && request.resource.data.status == 'Chờ xác nhận' && request.resource.data.mark == ''));
-      allow delete: if hasRole(['admin', 'nhan_su']);
+      allow delete: if hasRole(['admin']) || hasPerm('lockAttendance', ['nhan_su', 'admin']);
     }
     match /attendanceLocks/{m} {
       allow read: if isEmp();
-      allow write: if hasRole(['nhan_su', 'admin']);
+      allow write: if hasPerm('lockAttendance', ['nhan_su', 'admin']);
     }
-    // Trường dữ liệu tùy chỉnh: HR & quản trị định nghĩa
+    // Trường dữ liệu tùy chỉnh
     match /hrFields/{entity} {
       allow read: if isEmp();
-      allow write: if hasRole(['admin', 'nhan_su']);
+      allow write: if hasPerm('manageSettings', ['nhan_su', 'admin']);
     }
     // Danh sách chọn dùng chung: mọi nhân viên được thêm lựa chọn mới (nút ＋)
     match /hrOptions/{key} {
@@ -257,12 +268,12 @@ service cloud.firestore {
       allow create: if isEmp();
       allow update: if isEmp() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['values', 'updatedAt', 'updatedBy'])
         && request.resource.data.values.hasAll(resource.data.values);
-      allow update, delete: if hasRole(['admin', 'nhan_su']);
+      allow update, delete: if hasPerm('manageSettings', ['nhan_su', 'admin']);
     }
-    // Bảng lương: CHỈ Giám đốc xem và sửa
-    match /payrollProfiles/{email} { allow read, write: if hasRole(['giam_doc']); }
-    match /payrollSettings/{id} { allow read, write: if hasRole(['giam_doc']); }
-    match /payrollPeriods/{m} { allow read, write: if hasRole(['giam_doc']); }
+    // Bảng lương: chỉ người có quyền "Bảng lương" (mặc định Giám đốc)
+    match /payrollProfiles/{email} { allow read, write: if hasPerm('payroll', ['giam_doc']); }
+    match /payrollSettings/{id} { allow read, write: if hasPerm('payroll', ['giam_doc']); }
+    match /payrollPeriods/{m} { allow read, write: if hasPerm('payroll', ['giam_doc']); }
 
     // Nhật ký kiểm toán: chỉ thêm, không sửa/xóa
     match /auditLogs/{id} {
