@@ -206,7 +206,10 @@ service cloud.firestore {
     // Đặt xe: mọi nhân viên xem (để biết xe trống); Giám đốc hoặc người được phân quyền duyệt
     match /vehicleBookings/{id} {
       allow read: if isEmp();
-      allow create: if isEmp() && ownsNew() && request.resource.data.status == 'Chờ duyệt';
+      // Chuyến của Giám đốc (tài xế / hành chính đặt, hoặc Giám đốc tự đặt) được giữ xe ngay, không cần duyệt
+      allow create: if isEmp() && ownsNew() && (request.resource.data.status == 'Chờ duyệt'
+        || (request.resource.data.status == 'Đã duyệt' && (hasRole(['giam_doc'])
+            || (request.resource.data.forDirector == true && hasRole(['tai_xe', 'hanh_chinh', 'admin'])))));
       allow update: if isEmp() && (hasRole(['giam_doc', 'admin', 'hanh_chinh']) || (fleetApprover() && !ownsExisting())
         || (ownsExisting() && ownsNew() && (request.resource.data.status != 'Đã duyệt' || resource.data.status == 'Đã duyệt')));
       allow delete: if hasRole(['admin']);
