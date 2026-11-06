@@ -225,7 +225,7 @@ service cloud.firestore {
         || (ownsExisting() && ownsNew() && (request.resource.data.status != 'Đã duyệt' || resource.data.status == 'Đã duyệt'))
         // Tài xế được phân công: xác nhận về / trả xe
         || (resource.data.get('driverEmail', '') == me() && resource.data.status == 'Đã duyệt' && request.resource.data.status == 'Hoàn tất'
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'actualEnd', 'end', 'kmStart', 'kmEnd', 'tripNote', 'late', 'updatedAt', 'updatedBy'])));
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'actualEnd', 'end', 'kmStart', 'kmEnd', 'tripNote', 'late', 'costs', 'actualCost', 'paymentId', 'paymentCode', 'updatedAt', 'updatedBy'])));
       allow delete: if hasRole(['admin']);
     }
     // Kế hoạch công việc
@@ -279,6 +279,18 @@ service cloud.firestore {
     match /payrollProfiles/{email} { allow read, write: if hasPerm('payroll', ['giam_doc']); }
     match /payrollSettings/{id} { allow read, write: if hasPerm('payroll', ['giam_doc']); }
     match /payrollPeriods/{m} { allow read, write: if hasPerm('payroll', ['giam_doc']); }
+
+    // Đề nghị thanh toán: người đề nghị + người duyệt (watchers) + người xem tất cả / kế toán chi tiền
+    match /paymentRequests/{id} {
+      allow read: if isEmp() && (hasPerm('viewAllPayments', ['ke_toan_truong', 'giam_doc', 'admin'])
+        || hasPerm('payPayments', ['ke_toan_truong', 'admin']) || me() in resource.data.watchers);
+      allow create: if isEmp() && ownsNew() && me() in request.resource.data.watchers && request.resource.data.status == 'Chờ duyệt';
+      allow update: if isEmp() && (hasRole(['admin'])
+        || (me() in resource.data.watchers && !ownsExisting() && request.resource.data.status != 'Đã thanh toán')
+        || (ownsExisting() && ownsNew() && request.resource.data.status in ['Chờ duyệt', 'Đang duyệt', 'Đã hủy'])
+        || (hasPerm('payPayments', ['ke_toan_truong', 'admin']) && resource.data.status == 'Đã duyệt' && request.resource.data.status == 'Đã thanh toán'));
+      allow delete: if hasRole(['admin']);
+    }
 
     // Nhật ký kiểm toán: chỉ thêm, không sửa/xóa
     match /auditLogs/{id} {
