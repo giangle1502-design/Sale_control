@@ -258,6 +258,11 @@ service cloud.firestore {
         || (ownsExisting() && resource.data.status == 'Chờ xác nhận' && request.resource.data.status == 'Chờ xác nhận' && request.resource.data.mark == ''));
       allow delete: if hasRole(['admin']) || hasPerm('lockAttendance', ['nhan_su', 'admin']);
     }
+    // Dữ liệu máy chấm công khuôn mặt (nhập Excel): Nhân sự ghi; nhân viên & cấp trên (watchers) xem
+    match /faceLogs/{id} {
+      allow read: if isEmp() && (attAll() || me() in resource.data.watchers);
+      allow write: if attAll();
+    }
     match /attendanceLocks/{m} {
       allow read: if isEmp();
       allow write: if hasPerm('lockAttendance', ['nhan_su', 'admin']);
