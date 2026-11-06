@@ -214,7 +214,7 @@ service cloud.firestore {
     }
     // Chế độ "ai đặt trước được xe" (Phân quyền & luồng duyệt → Đặt xe)
     function bookingAuto() { return exists(permPath()) && get(permPath()).data.get('bookingMode', 'approval') == 'auto'; }
-    // Đặt xe: mọi nhân viên xem (để biết xe trống); người duyệt nằm trong watchers
+    // Đề nghị công tác (kèm xe, tài xế): mọi nhân viên xem (để biết xe trống); người duyệt nằm trong watchers
     match /vehicleBookings/{id} {
       allow read: if isEmp();
       allow create: if isEmp() && ownsNew() && (request.resource.data.status == 'Chờ duyệt'
@@ -222,7 +222,10 @@ service cloud.firestore {
             || (request.resource.data.forDirector == true && hasPerm('bookForDirector', ['tai_xe', 'hanh_chinh', 'admin'])))));
       allow update: if isEmp() && (hasRole(['admin']) || hasPerm('manageFleet', ['hanh_chinh', 'admin'])
         || (me() in resource.data.get('watchers', []) && !ownsExisting())
-        || (ownsExisting() && ownsNew() && (request.resource.data.status != 'Đã duyệt' || resource.data.status == 'Đã duyệt')));
+        || (ownsExisting() && ownsNew() && (request.resource.data.status != 'Đã duyệt' || resource.data.status == 'Đã duyệt'))
+        // Tài xế được phân công: xác nhận về / trả xe
+        || (resource.data.get('driverEmail', '') == me() && resource.data.status == 'Đã duyệt' && request.resource.data.status == 'Hoàn tất'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'actualEnd', 'end', 'kmStart', 'kmEnd', 'tripNote', 'late', 'updatedAt', 'updatedBy'])));
       allow delete: if hasRole(['admin']);
     }
     // Kế hoạch công việc
