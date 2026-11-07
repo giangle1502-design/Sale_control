@@ -2,6 +2,7 @@ import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/fi
 import { db } from '../firebase';
 import { useApp } from '../context/AppContext';
 import { useQuery } from '../lib/hooks';
+import { renameCampaign } from '../lib/giftSync';
 
 // Danh mục Dịp tặng quà & Gói quà (collection giftCampaigns) — dùng chung với app Nhân sự.
 // Phòng Giám đốc cập nhật nội dung gói quà (gồm những gì, giá trị) trong app Nhân sự; sale chọn ở đây.
@@ -15,7 +16,7 @@ export const packageValue = (p) => (p?.items || []).reduce((s, it) => s + (Numbe
 export const packageText = (p) => (p?.items || []).map((it) => `${it.name}${it.qty ? ` x${it.qty}${it.unit ? ' ' + it.unit : ''}` : ''}`).join(', ');
 
 export function CampaignPicker({ campaigns, value, onChange }) {
-  const { profile } = useApp();
+  const { profile, isAdmin } = useApp();
   const add = async () => {
     const name = window.prompt('Tên dịp tặng quà mới (VD: Quà tặng khách Tết Dương lịch 2027):', '');
     if (!name || !name.trim()) return;
@@ -32,8 +33,23 @@ export function CampaignPicker({ campaigns, value, onChange }) {
         {value && !campaigns.some((c) => c.name === value) && <option value={value}>{value}</option>}
       </select>
       <button type="button" className="btn sm plus" title="Thêm dịp tặng quà mới" onClick={add}>＋</button>
+      {isAdmin && value && <button type="button" className="btn sm" title="Sửa tên dịp — đồng bộ cho tất cả khách đã chọn dịp này" onClick={() => editCampaign({ campaigns, value, email: profile.email, onChange })}>✏️</button>}
     </div>
   );
+}
+
+// Sửa tên dịp (Admin). Đồng bộ tên mới cho mọi khách trong danh sách tặng quà; trùng tên dịp khác → gộp.
+export async function editCampaign({ campaigns, value, email, onChange }) {
+  const name = window.prompt(`Sửa tên dịp "${value}" thành:\n(Tất cả khách đã chọn dịp này sẽ được cập nhật theo. Nhập trùng tên dịp khác để gộp vào dịp đó.)`, value);
+  if (!name || !name.trim() || name.trim() === value) return;
+  const campaign = campaigns.find((c) => c.name === value);
+  const target = campaigns.find((c) => c !== campaign && c.name.trim().toLowerCase() === name.trim().toLowerCase());
+  if (target && !window.confirm(`Đã có dịp "${target.name}". Gộp toàn bộ khách của "${value}" vào dịp này?`)) return;
+  try {
+    const res = await renameCampaign({ campaign, oldName: value, newName: name, email, target });
+    window.alert(`Đã ${res.merged ? 'gộp' : 'đổi tên'} dịp và cập nhật ${res.count} khách.`);
+    onChange?.(target ? target.name : name.trim());
+  } catch (e) { window.alert(e.message); }
 }
 
 export function PackagePicker({ campaign, value, onChange }) {

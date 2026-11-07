@@ -331,7 +331,11 @@ service cloud.firestore {
 
     // Quà tặng khách hàng (dữ liệu app Sale): người có quyền "viewGifts" trong app Nhân sự được xem
     match /gifts/{id} {
-      allow read: if hasPerm('viewGifts', ['ke_toan_truong', 'giam_doc', 'admin']);
+      allow read: if hasPerm('viewGifts', ['ke_toan_truong', 'giam_doc', 'admin'])
+        || hasPerm('manageGifts', ['giam_doc', 'admin']);
+      // Phòng Giám đốc đổi tên dịp / gói quà → đồng bộ cho khách (chỉ các trường này)
+      allow update: if hasPerm('manageGifts', ['giam_doc', 'admin'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['campaign', 'campaignId', 'giftName', 'updatedAt', 'updatedBy']);
     }
 
     // Danh mục Dịp tặng quà & Gói quà: phòng Giám đốc (quyền manageGifts) sửa toàn bộ;

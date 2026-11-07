@@ -8,7 +8,7 @@ import { fmtDate, norm, today } from '../lib/utils';
 import { exportSheets } from '../lib/excel';
 import { useCustomers } from '../components/CustomerPicker';
 import { confirmDelete, Empty, ErrorBox, Field, Modal, Stat } from '../components/ui';
-import { CampaignPicker, PackagePicker, packageText, useCampaigns } from '../components/GiftCatalog';
+import { CampaignPicker, editCampaign, PackagePicker, packageText, useCampaigns } from '../components/GiftCatalog';
 
 export const GIFT_STATUSES = ['Chưa tặng', 'Đã tặng', 'Hủy'];
 const fmtInt = (n) => Number(n || 0).toLocaleString('en-US');
@@ -147,6 +147,7 @@ export default function Gifts() {
               <option value="">Tất cả đợt / dịp</option>
               {campaigns.map((c) => <option key={c}>{c}</option>)}
             </select>
+            {isAdmin && campaign && <button type="button" className="btn sm" title="Sửa tên dịp — đồng bộ cho mọi khách" onClick={() => editCampaign({ campaigns: catalog, value: campaign, email, onChange: setCampaign })}>✏️ Sửa tên dịp</button>}
             {isAdmin && (
               <select value={staff} onChange={(e) => { setStaff(e.target.value); setPicked(new Set()); }}>
                 <option value="">Tất cả nhân viên</option>
