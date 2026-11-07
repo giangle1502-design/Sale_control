@@ -269,6 +269,16 @@ service cloud.firestore {
       allow read: if isEmp() && (attAll() || me() in resource.data.watchers);
       allow write: if attAll();
     }
+    // Bổ sung / giải trình công: người gửi + người duyệt (watchers) + người xem chấm công toàn công ty
+    match /attRequests/{id} {
+      allow read: if isEmp() && (attAll() || me() in resource.data.watchers);
+      allow create: if isEmp() && ownsNew() && me() in request.resource.data.watchers && request.resource.data.status == 'Chờ duyệt'
+        && attOpen(request.resource.data.month);
+      allow update: if isEmp() && (hasRole(['admin'])
+        || (me() in resource.data.watchers && !ownsExisting())
+        || (ownsExisting() && ownsNew() && request.resource.data.status in ['Chờ duyệt', 'Đang duyệt', 'Đã hủy']));
+      allow delete: if hasRole(['admin']);
+    }
     match /attendanceLocks/{m} {
       allow read: if isEmp();
       allow write: if hasPerm('lockAttendance', ['nhan_su', 'admin']);
