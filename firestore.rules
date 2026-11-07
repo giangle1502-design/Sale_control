@@ -329,6 +329,11 @@ service cloud.firestore {
       allow delete: if hasRole(['admin']) || (isEmp() && resource.data.assignerEmail == me());
     }
 
+    // Quà tặng khách hàng (dữ liệu app Sale): người có quyền "viewGifts" trong app Nhân sự được xem
+    match /gifts/{id} {
+      allow read: if hasPerm('viewGifts', ['ke_toan_truong', 'giam_doc', 'admin']);
+    }
+
     // Nhật ký kiểm toán: chỉ thêm, không sửa/xóa
     match /auditLogs/{id} {
       allow create: if isEmp() && request.resource.data.by == me();
