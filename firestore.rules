@@ -334,6 +334,20 @@ service cloud.firestore {
       allow read: if hasPerm('viewGifts', ['ke_toan_truong', 'giam_doc', 'admin']);
     }
 
+    // Danh mục Dịp tặng quà & Gói quà: phòng Giám đốc (quyền manageGifts) sửa toàn bộ;
+    // sale chỉ được tạo dịp mới (chưa có gói) và thêm gói quà mới (không sửa/xóa gói đã có).
+    match /giftCampaigns/{id} {
+      allow read: if isStaff() || isEmp();
+      allow create: if hasPerm('manageGifts', ['giam_doc', 'admin'])
+        || (isStaff() && request.resource.data.packages.size() == 0);
+      allow update: if hasPerm('manageGifts', ['giam_doc', 'admin']) || isAdmin()
+        || (isStaff()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['packages', 'updatedAt', 'updatedBy'])
+            && request.resource.data.packages.size() == resource.data.packages.size() + 1
+            && request.resource.data.packages.hasAll(resource.data.packages));
+      allow delete: if hasPerm('manageGifts', ['giam_doc', 'admin']);
+    }
+
     // Nhật ký kiểm toán: chỉ thêm, không sửa/xóa
     match /auditLogs/{id} {
       allow create: if isEmp() && request.resource.data.by == me();

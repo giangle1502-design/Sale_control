@@ -8,6 +8,7 @@ import { fmtDate, norm, today } from '../lib/utils';
 import { exportSheets } from '../lib/excel';
 import { useCustomers } from '../components/CustomerPicker';
 import { confirmDelete, Empty, ErrorBox, Field, Modal, Stat } from '../components/ui';
+import { CampaignPicker, PackagePicker, packageText, useCampaigns } from '../components/GiftCatalog';
 
 export const GIFT_STATUSES = ['Chưa tặng', 'Đã tặng', 'Hủy'];
 const fmtInt = (n) => Number(n || 0).toLocaleString('en-US');
@@ -39,7 +40,8 @@ export default function Gifts() {
     [email, isAdmin, staff]
   );
 
-  const campaigns = useMemo(() => [...new Set(data.map((g) => g.campaign).filter(Boolean))].sort(), [data]);
+  const { list: catalog } = useCampaigns();
+  const campaigns = useMemo(() => [...new Set([...catalog.map((c) => c.name), ...data.map((g) => g.campaign)].filter(Boolean))].sort(), [data, catalog]);
   const scoped = useMemo(() => data.filter((g) => !campaign || g.campaign === campaign), [data, campaign]);
   const rows = useMemo(() => {
     const k = norm(q);
@@ -186,7 +188,7 @@ export default function Gifts() {
                         {isAdmin && <td>{staffName(g.ownerEmail)}</td>}
                         <td className="nowrap">{g.customerCode}</td>
                         <td>{g.customerName}{g.note && <div className="small">{g.note}</div>}</td>
-                        <td>{g.campaign}{g.giftName && <div className="small">🎁 {g.giftName}</div>}</td>
+                        <td>{g.campaign}{g.giftName && <div className="small" title={packageText(catalog.find((c) => c.name === g.campaign)?.packages?.find((p) => p.name === g.giftName))}>🎁 {g.giftName}</div>}</td>
                         <td className="nowrap">{fmtDate(g.planDate)}</td>
                         <td className="nowrap">{fmtDate(g.giftDate)}</td>
                         <td>{statusBadge(g)}</td>
@@ -280,7 +282,9 @@ function CreateListModal({ onClose, existing, campaigns }) {
   const { email, isAdmin, profile, staffList, staffName } = useApp();
   const [owner, setOwner] = useState(isAdmin ? '' : email);
   const { data: customers, loading } = useCustomers(owner);
-  const [campaign, setCampaign] = useState(campaigns[campaigns.length - 1] || `Tết ${new Date().getFullYear() + 1}`);
+  const { list: catalog } = useCampaigns();
+  const [campaign, setCampaign] = useState('');
+  const camp = catalog.find((c) => c.name === campaign);
   const [planDate, setPlanDate] = useState('');
   const [giftName, setGiftName] = useState('');
   const [type, setType] = useState('');
@@ -303,7 +307,7 @@ function CreateListModal({ onClose, existing, campaigns }) {
   const toggleAll = () => setSel((p) => { const n = new Set(p); selectable.forEach((c) => (allOn ? n.delete(c.id) : n.add(c.id))); return n; });
 
   const submit = async () => {
-    if (!campaign.trim()) return setErr('Nhập tên đợt / dịp tặng quà (VD: Tết 2027).');
+    if (!campaign.trim()) return setErr('Chọn dịp tặng quà (hoặc bấm ＋ để thêm).');
     if (!planDate) return setErr('Chọn ngày tặng dự kiến.');
     const chosen = customers.filter((c) => sel.has(c.id) && !already.has(c.id));
     if (!chosen.length) return setErr('Chưa chọn khách hàng nào.');
@@ -316,7 +320,7 @@ function CreateListModal({ onClose, existing, campaigns }) {
           b.set(doc(collection(db, 'gifts')), {
             ownerEmail, ownerName: staffName(ownerEmail) || ownerEmail,
             customerId: c.id, customerCode: c.code || '', customerName: c.name || '',
-            campaign: campaign.trim(), giftName: giftName.trim(), planDate, giftDate: '', status: 'Chưa tặng', note: '',
+            campaign: campaign.trim(), campaignId: camp?.id || '', giftName: giftName.trim(), planDate, giftDate: '', status: 'Chưa tặng', note: '',
             createdAt: serverTimestamp(), createdBy: profile.email, updatedAt: serverTimestamp(), updatedBy: profile.email,
           });
         });
@@ -330,11 +334,10 @@ function CreateListModal({ onClose, existing, campaigns }) {
     <Modal title="Tạo danh sách tặng quà" onClose={onClose} wide>
       <div className="form-grid">
         <Field label="Đợt / Dịp tặng quà" required>
-          <input list="gift-campaigns" value={campaign} onChange={(e) => setCampaign(e.target.value)} placeholder="VD: Tết 2027, Trung thu 2026" />
-          <datalist id="gift-campaigns">{campaigns.map((c) => <option key={c} value={c} />)}</datalist>
+          <CampaignPicker campaigns={catalog} value={campaign} onChange={(name, c) => { setCampaign(name); setGiftName(''); if (c?.planDate && !planDate) setPlanDate(c.planDate); }} />
         </Field>
         <Field label="Ngày tặng dự kiến" required><input type="date" value={planDate} onChange={(e) => setPlanDate(e.target.value)} /></Field>
-        <Field label="Quà tặng (không bắt buộc)"><input value={giftName} onChange={(e) => setGiftName(e.target.value)} placeholder="VD: Giỏ quà Tết, Lịch + rượu…" /></Field>
+        <Field label="Gói quà"><PackagePicker campaign={camp} value={giftName} onChange={setGiftName} /></Field>
         {isAdmin && (
           <Field label="Khách của nhân viên">
             <select value={owner} onChange={(e) => { setOwner(e.target.value); setSel(new Set()); }}>
@@ -424,6 +427,7 @@ function MarkDoneModal({ items, onClose }) {
 }
 
 function EditGiftModal({ initial, onClose, campaigns }) {
+  const { list: catalog } = useCampaigns();
   const { profile } = useApp();
   const [f, setF] = useState({ campaign: '', giftName: '', planDate: '', giftDate: '', status: 'Chưa tặng', note: '', ...initial });
   const [busy, setBusy] = useState(false);
@@ -435,7 +439,7 @@ function EditGiftModal({ initial, onClose, campaigns }) {
     setBusy(true); setErr('');
     try {
       await saveDoc('gifts', f.id, {
-        campaign: f.campaign.trim(), giftName: f.giftName.trim(), planDate: f.planDate,
+        campaign: f.campaign.trim(), campaignId: f.campaignId || catalog.find((c) => c.name === f.campaign)?.id || '', giftName: f.giftName.trim(), planDate: f.planDate,
         giftDate: f.status === 'Đã tặng' ? f.giftDate : '', status: f.status, note: f.note.trim(),
       }, profile);
       onClose();
@@ -446,10 +450,9 @@ function EditGiftModal({ initial, onClose, campaigns }) {
       <form onSubmit={submit}>
         <div className="form-grid">
           <Field label="Đợt / Dịp" required>
-            <input list="gift-campaigns-e" value={f.campaign} onChange={set('campaign')} required />
-            <datalist id="gift-campaigns-e">{campaigns.map((c) => <option key={c} value={c} />)}</datalist>
+            <CampaignPicker campaigns={catalog} value={f.campaign} onChange={(name, c) => setF({ ...f, campaign: name, campaignId: c?.id || '', giftName: f.campaign === name ? f.giftName : '' })} />
           </Field>
-          <Field label="Quà tặng"><input value={f.giftName} onChange={set('giftName')} /></Field>
+          <Field label="Gói quà"><PackagePicker campaign={catalog.find((c) => c.name === f.campaign)} value={f.giftName} onChange={(v) => setF({ ...f, giftName: v })} /></Field>
           <Field label="Ngày tặng dự kiến" required><input type="date" value={f.planDate} onChange={set('planDate')} required /></Field>
           <Field label="Tình trạng">
             <select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value, giftDate: e.target.value === 'Đã tặng' ? (f.giftDate || today()) : f.giftDate })}>
@@ -477,7 +480,7 @@ function HelpPanel({ onClose }) {
       <h4>1. Tạo danh sách tặng quà</h4>
       <ol>
         <li>Bấm <b>+ Tạo danh sách tặng quà</b>.</li>
-        <li>Nhập <b>Đợt / Dịp</b> (VD: <i>Tết 2027</i>) và <b>Ngày tặng dự kiến</b>. Quà tặng có thể để trống.</li>
+        <li>Chọn <b>Dịp tặng quà</b> (VD: <i>Quà tặng khách Tết Âm lịch 2027</i>) và <b>Gói quà</b> — chưa có thì bấm <b>＋</b> để thêm. Nội dung gói quà (gồm những gì, giá trị) do phòng Giám đốc cập nhật. Nhập <b>Ngày tặng dự kiến</b>.</li>
         <li>Bảng bên dưới là <b>khách hàng do bạn phụ trách</b>. Gõ tìm hoặc lọc Khách cũ / Khách mới, rồi tích chọn từng khách hoặc ô trên cùng để chọn tất cả.</li>
         <li>Bấm <b>Tạo danh sách</b>. Khách đã có trong cùng đợt sẽ hiện "Đã có trong đợt này" và không bị tạo trùng.</li>
       </ol>

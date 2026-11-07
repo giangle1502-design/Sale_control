@@ -258,3 +258,6 @@ tr.gift-sub table { background: #fff; border: 1px solid var(--line); border-radi
   .gift-layout { grid-template-columns: minmax(0, 1fr); }
   .gift-help { position: static; max-height: none; order: -1; }
 }
+.select-add { display: flex; gap: 6px; align-items: center; }
+.select-add select { flex: 1; min-width: 0; }
+.btn.plus { flex: none; font-weight: 700; }
