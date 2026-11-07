@@ -297,6 +297,22 @@ service cloud.firestore {
       allow delete: if hasRole(['admin']);
     }
 
+    // Giao việc: người giao toàn quyền; người thực hiện cập nhật tiến độ / báo cáo; người theo dõi trao đổi
+    match /assignments/{id} {
+      allow read: if isEmp() && (hasPerm('viewAllAssign', ['giam_doc', 'pho_giam_doc', 'admin']) || me() in resource.data.watchers);
+      allow create: if isEmp() && request.resource.data.assignerEmail == me() && me() in request.resource.data.watchers
+        && (request.resource.data.assignees == [me()]
+            || hasPerm('assignAll', ['giam_doc', 'pho_giam_doc', 'ke_toan_truong', 'nhan_su', 'admin'])
+            || hasPerm('assignTeam', ['truong_phong']));
+      allow update: if isEmp() && (hasRole(['admin']) || resource.data.assignerEmail == me()
+        || (me() in resource.data.assignees
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'progress', 'checklist', 'comments', 'result', 'reportedAt', 'acceptedAt', 'doneAt', 'history', 'updatedAt', 'updatedBy'])
+            && (request.resource.data.status in ['Đang làm', 'Chờ nghiệm thu', resource.data.status]
+                || (request.resource.data.status == 'Hoàn thành' && resource.data.requireReview == false)))
+        || (me() in resource.data.watchers && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'updatedAt', 'updatedBy'])));
+      allow delete: if hasRole(['admin']) || (isEmp() && resource.data.assignerEmail == me());
+    }
+
     // Nhật ký kiểm toán: chỉ thêm, không sửa/xóa
     match /auditLogs/{id} {
       allow create: if isEmp() && request.resource.data.by == me();
