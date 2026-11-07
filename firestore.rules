@@ -195,7 +195,13 @@ service cloud.firestore {
     // Cài đặt: 'permissions' (phân quyền, luồng duyệt) và 'fleet' cần quyền Phân quyền
     match /hrSettings/{id} {
       allow read: if isEmp();
-      allow write: if (id == 'permissions' || id == 'fleet') ? hasPerm('managePerms', ['admin', 'giam_doc']) : hasPerm('manageSettings', ['nhan_su', 'admin']);
+      allow write: if (id == 'permissions' || id == 'fleet') ? hasPerm('managePerms', ['admin', 'giam_doc'])
+        : id == 'views' ? hasPerm('tableDefaults', ['nhan_su', 'giam_doc', 'admin'])
+        : hasPerm('manageSettings', ['nhan_su', 'admin']);
+    }
+    // Cách hiển thị cột bảng của riêng từng người
+    match /hrUserPrefs/{email} {
+      allow read, write: if signedIn() && email == me();
     }
     // Đơn nghỉ phép: chủ đơn + mọi người duyệt của đơn (watchers) + người có quyền xem tất cả
     match /leaveRequests/{id} {
