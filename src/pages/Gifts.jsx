@@ -14,11 +14,17 @@ export const GIFT_STATUSES = ['Chưa tặng', 'Đã tặng', 'Hủy'];
 const fmtInt = (n) => Number(n || 0).toLocaleString('en-US');
 const pct = (a, b) => (b ? ((a / b) * 100).toFixed(1) + '%' : '–');
 const isOverdue = (g, ref = today()) => g.status === 'Chưa tặng' && g.planDate && g.planDate < ref;
+// Lịch tặng (schedDate): ngày sale tự hẹn đi tặng. Trễ hẹn = đã qua ngày hẹn mà chưa tặng.
+const isLate = (g, ref = today()) => g.status === 'Chưa tặng' && g.schedDate && g.schedDate < ref;
+const addDays = (ymd, n) => { const d = new Date(ymd + 'T00:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const WD = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+const wd = (ymd) => WD[new Date(ymd + 'T00:00:00').getDay()];
 
 function statusBadge(g) {
   if (g.status === 'Đã tặng') return <span className="badge green">Đã tặng</span>;
   if (g.status === 'Hủy') return <span className="badge">Hủy</span>;
   if (isOverdue(g)) return <span className="badge red">Chưa tặng · quá hạn</span>;
+  if (isLate(g)) return <span className="badge red">Chưa tặng · trễ hẹn</span>;
   return <span className="badge amber">Chưa tặng</span>;
 }
 
@@ -46,10 +52,10 @@ export default function Gifts() {
   const rows = useMemo(() => {
     const k = norm(q);
     return scoped
-      .filter((g) => !status || (status === 'Quá hạn' ? isOverdue(g) : g.status === status))
+      .filter((g) => !status || (status === 'Quá hạn' ? isOverdue(g) : status === 'Trễ hẹn' ? isLate(g) : status === 'Chưa lên lịch' ? (g.status === 'Chưa tặng' && !g.schedDate) : g.status === status))
       .filter((g) => !k || norm(`${g.customerCode} ${g.customerName} ${g.giftName} ${g.note}`).includes(k))
       .sort((a, b) => (a.status === 'Đã tặng') - (b.status === 'Đã tặng')
-        || String(a.planDate || '9').localeCompare(String(b.planDate || '9'))
+        || String(a.schedDate || a.planDate || '9').localeCompare(String(b.schedDate || b.planDate || '9'))
         || String(a.customerName).localeCompare(String(b.customerName)));
   }, [scoped, status, q]);
 
@@ -58,6 +64,9 @@ export default function Gifts() {
   const given = active.filter((g) => g.status === 'Đã tặng').length;
   const notGiven = total - given;
   const overdue = active.filter((g) => isOverdue(g)).length;
+  const unscheduled = active.filter((g) => g.status === 'Chưa tặng' && !g.schedDate).length;
+  const [scheduling, setScheduling] = useState(null);
+  const setSched = (g, v) => saveDoc('gifts', g.id, { schedDate: v }, profile);
 
   const byStaff = useMemo(() => {
     const m = new Map();
@@ -104,7 +113,7 @@ export default function Gifts() {
   const doExport = () => {
     const line = (g) => ({
       'Nhân viên': staffName(g.ownerEmail), 'Đợt / Dịp': g.campaign || '', 'Mã KH': g.customerCode || '', 'Tên khách hàng': g.customerName,
-      'Quà tặng': g.giftName || '', 'Ngày tặng dự kiến': fmtDate(g.planDate), 'Ngày tặng khách': fmtDate(g.giftDate),
+      'Quà tặng': g.giftName || '', 'Hạn tặng': fmtDate(g.planDate), 'Lịch tặng (sale hẹn)': fmtDate(g.schedDate), 'Ngày tặng khách': fmtDate(g.giftDate),
       'Tình trạng': isOverdue(g) ? 'Chưa tặng (quá hạn)' : g.status, 'Ghi chú': g.note || '',
     });
     exportSheets(`QuaTang_${campaign || 'TatCa'}_${today()}`, {
@@ -133,12 +142,14 @@ export default function Gifts() {
             <Stat label="Tổng khách cần tặng" value={fmtInt(total)} onClick={() => setStatus('')} active={!status} />
             <Stat label="Đã tặng" value={fmtInt(given)} sub={`Hoàn thành ${pct(given, total)}`} tone="green" onClick={() => setStatus('Đã tặng')} active={status === 'Đã tặng'} />
             <Stat label="Chưa tặng" value={fmtInt(notGiven)} tone="amber" onClick={() => setStatus('Chưa tặng')} active={status === 'Chưa tặng'} />
-            <Stat label="Quá ngày dự kiến" value={fmtInt(overdue)} sub="Chưa tặng, đã qua ngày dự kiến" tone="red" onClick={() => setStatus('Quá hạn')} active={status === 'Quá hạn'} />
+            <Stat label="Chưa lên lịch" value={fmtInt(unscheduled)} sub="Chưa hẹn ngày đi tặng" onClick={() => { setTab('list'); setStatus('Chưa lên lịch'); }} active={status === 'Chưa lên lịch'} />
+            <Stat label="Quá hạn tặng" value={fmtInt(overdue)} sub="Chưa tặng, đã qua hạn tặng" tone="red" onClick={() => { setTab('list'); setStatus('Quá hạn'); }} active={status === 'Quá hạn'} />
           </div>
           {total > 0 && <div className="progress gift-progress"><div style={{ width: pct(given, total) }} /></div>}
 
           <div className="gift-tabs">
             <button className={'chip' + (tab === 'list' ? ' on' : '')} onClick={() => setTab('list')}>📋 Danh sách tặng quà</button>
+            <button className={'chip' + (tab === 'day' ? ' on' : '')} onClick={() => setTab('day')}>📅 Kế hoạch theo ngày</button>
             <button className={'chip' + (tab === 'report' ? ' on' : '')} onClick={() => setTab('report')}>📊 Báo cáo theo nhân viên</button>
           </div>
 
@@ -158,7 +169,9 @@ export default function Gifts() {
               <select value={status} onChange={(e) => setStatus(e.target.value)}>
                 <option value="">Tất cả tình trạng</option>
                 {GIFT_STATUSES.map((s) => <option key={s}>{s}</option>)}
-                <option value="Quá hạn">Quá hạn</option>
+                <option value="Chưa lên lịch">Chưa lên lịch</option>
+                <option value="Trễ hẹn">Trễ hẹn</option>
+                <option value="Quá hạn">Quá hạn tặng</option>
               </select>
               <input placeholder="Tìm mã / tên khách…" value={q} onChange={(e) => setQ(e.target.value)} />
             </>}
@@ -169,6 +182,7 @@ export default function Gifts() {
             {picked.size > 0 && (
               <div className="gift-bulk">
                 Đã chọn <b>{picked.size}</b> khách
+                {pickedOpen.length > 0 && <button className="btn sm" onClick={() => setScheduling(pickedOpen)}>📅 Lên lịch tặng ({pickedOpen.length})</button>}
                 {pickedOpen.length > 0 && <button className="btn primary sm" onClick={() => setDoneFor(pickedOpen)}>✓ Đánh dấu đã tặng ({pickedOpen.length})</button>}
                 <button className="btn danger sm" disabled={deleting} onClick={bulkDelete}>🗑 Xóa {pickedRows.length} khách đã chọn</button>
                 <button className="btn sm" onClick={() => setPicked(new Set())}>Bỏ chọn</button>
@@ -180,7 +194,7 @@ export default function Gifts() {
                   <thead><tr>
                     <th><input type="checkbox" checked={allPicked} onChange={toggleAll} title="Chọn tất cả khách đang hiển thị" /></th>
                     {isAdmin && <th>Nhân viên</th>}
-                    <th>Mã KH</th><th>Tên khách hàng</th><th>Đợt / Quà</th><th>Ngày tặng dự kiến</th><th>Ngày tặng khách</th><th>Tình trạng</th><th></th>
+                    <th>Mã KH</th><th>Tên khách hàng</th><th>Đợt / Quà</th><th title="Hạn chót phải tặng xong">Hạn tặng</th><th title="Ngày sale hẹn đi tặng — bấm để chọn ngày">Lịch tặng</th><th>Ngày đã tặng</th><th>Tình trạng</th><th></th>
                   </tr></thead>
                   <tbody>
                     {rows.map((g) => (
@@ -191,6 +205,9 @@ export default function Gifts() {
                         <td>{g.customerName}{g.note && <div className="small">{g.note}</div>}</td>
                         <td>{g.campaign}{g.giftName && <div className="small" title={packageText(catalog.find((c) => c.name === g.campaign)?.packages?.find((p) => p.name === g.giftName))}>🎁 {g.giftName}</div>}</td>
                         <td className="nowrap">{fmtDate(g.planDate)}</td>
+                        <td className="nowrap">{canEdit(g) && g.status === 'Chưa tặng'
+                          ? <input type="date" className={'sched-input' + (isLate(g) ? ' late' : '')} value={g.schedDate || ''} max={g.planDate || undefined} onChange={(e) => setSched(g, e.target.value)} />
+                          : fmtDate(g.schedDate)}</td>
                         <td className="nowrap">{fmtDate(g.giftDate)}</td>
                         <td>{statusBadge(g)}</td>
                         <td className="nowrap">
@@ -207,7 +224,9 @@ export default function Gifts() {
                 </table>
               )}
             </div>
-          </> : (
+          </> : tab === 'day' ? (
+            <DayPlan data={scoped} isAdmin={isAdmin} staffName={staffName} canEdit={canEdit} onDone={(list) => setDoneFor(list)} onSched={setSched} />
+          ) : (
             <StaffReport byStaff={byStaff} total={total} given={given} notGiven={notGiven} overdue={overdue}
               onOpen={(e) => { if (isAdmin) setStaff(e); setStatus(''); setTab('list'); }} isAdmin={isAdmin} />
           )}
@@ -218,6 +237,7 @@ export default function Gifts() {
 
       {creating && <CreateListModal onClose={() => setCreating(false)} existing={data} campaigns={campaigns} />}
       {edit && <EditGiftModal initial={edit} onClose={() => setEdit(null)} campaigns={campaigns} />}
+      {scheduling && <ScheduleModal items={scheduling} onClose={(ok) => { setScheduling(null); if (ok) setPicked(new Set()); }} />}
       {doneFor && <MarkDoneModal items={doneFor} onClose={(ok) => { setDoneFor(null); if (ok) setPicked(new Set()); }} />}
     </>
   );
@@ -262,7 +282,7 @@ function StaffRows({ s, open, onToggle, onOpen, isAdmin }) {
     {open && (
       <tr className="gift-sub"><td colSpan={7}>
         <table>
-          <thead><tr><th>Mã KH</th><th>Tên khách hàng</th><th>Đợt / Quà</th><th>Dự kiến</th><th>Ngày tặng</th><th>Tình trạng</th></tr></thead>
+          <thead><tr><th>Mã KH</th><th>Tên khách hàng</th><th>Đợt / Quà</th><th>Hạn tặng</th><th>Ngày tặng</th><th>Tình trạng</th></tr></thead>
           <tbody>
             {items.map((g) => (
               <tr key={g.id}>
@@ -309,7 +329,7 @@ function CreateListModal({ onClose, existing, campaigns }) {
 
   const submit = async () => {
     if (!campaign.trim()) return setErr('Chọn dịp tặng quà (hoặc bấm ＋ để thêm).');
-    if (!planDate) return setErr('Chọn ngày tặng dự kiến.');
+    if (!planDate) return setErr('Chọn hạn tặng (hạn chót phải tặng xong).');
     const chosen = customers.filter((c) => sel.has(c.id) && !already.has(c.id));
     if (!chosen.length) return setErr('Chưa chọn khách hàng nào.');
     setBusy(true); setErr('');
@@ -321,7 +341,7 @@ function CreateListModal({ onClose, existing, campaigns }) {
           b.set(doc(collection(db, 'gifts')), {
             ownerEmail, ownerName: staffName(ownerEmail) || ownerEmail,
             customerId: c.id, customerCode: c.code || '', customerName: c.name || '',
-            campaign: campaign.trim(), campaignId: camp?.id || '', giftName: giftName.trim(), planDate, giftDate: '', status: 'Chưa tặng', note: '',
+            campaign: campaign.trim(), campaignId: camp?.id || '', giftName: giftName.trim(), planDate, schedDate: '', giftDate: '', status: 'Chưa tặng', note: '',
             createdAt: serverTimestamp(), createdBy: profile.email, updatedAt: serverTimestamp(), updatedBy: profile.email,
           });
         });
@@ -337,7 +357,7 @@ function CreateListModal({ onClose, existing, campaigns }) {
         <Field label="Đợt / Dịp tặng quà" required>
           <CampaignPicker campaigns={catalog} value={campaign} onChange={(name, c) => { setCampaign(name); setGiftName(''); if (c?.planDate && !planDate) setPlanDate(c.planDate); }} />
         </Field>
-        <Field label="Ngày tặng dự kiến" required><input type="date" value={planDate} onChange={(e) => setPlanDate(e.target.value)} /></Field>
+        <Field label="Hạn tặng (hạn chót)" required hint="Ngày cụ thể đi tặng từng khách: lên lịch sau ở cột Lịch tặng"><input type="date" value={planDate} onChange={(e) => setPlanDate(e.target.value)} /></Field>
         <Field label="Gói quà"><PackagePicker campaign={camp} value={giftName} onChange={setGiftName} /></Field>
         {isAdmin && (
           <Field label="Khách của nhân viên">
@@ -440,7 +460,7 @@ function EditGiftModal({ initial, onClose, campaigns }) {
     setBusy(true); setErr('');
     try {
       await saveDoc('gifts', f.id, {
-        campaign: f.campaign.trim(), campaignId: f.campaignId || catalog.find((c) => c.name === f.campaign)?.id || '', giftName: f.giftName.trim(), planDate: f.planDate,
+        campaign: f.campaign.trim(), campaignId: f.campaignId || catalog.find((c) => c.name === f.campaign)?.id || '', giftName: f.giftName.trim(), planDate: f.planDate, schedDate: f.schedDate || '',
         giftDate: f.status === 'Đã tặng' ? f.giftDate : '', status: f.status, note: f.note.trim(),
       }, profile);
       onClose();
@@ -454,7 +474,8 @@ function EditGiftModal({ initial, onClose, campaigns }) {
             <CampaignPicker campaigns={catalog} value={f.campaign} onChange={(name, c) => setF({ ...f, campaign: name, campaignId: c?.id || '', giftName: f.campaign === name ? f.giftName : '' })} />
           </Field>
           <Field label="Gói quà"><PackagePicker campaign={catalog.find((c) => c.name === f.campaign)} value={f.giftName} onChange={(v) => setF({ ...f, giftName: v })} /></Field>
-          <Field label="Ngày tặng dự kiến" required><input type="date" value={f.planDate} onChange={set('planDate')} required /></Field>
+          <Field label="Hạn tặng" required><input type="date" value={f.planDate} onChange={set('planDate')} required /></Field>
+          <Field label="Lịch tặng (ngày hẹn đi tặng)"><input type="date" value={f.schedDate || ''} onChange={set('schedDate')} /></Field>
           <Field label="Tình trạng">
             <select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value, giftDate: e.target.value === 'Đã tặng' ? (f.giftDate || today()) : f.giftDate })}>
               {GIFT_STATUSES.map((s) => <option key={s}>{s}</option>)}
@@ -481,12 +502,20 @@ function HelpPanel({ onClose }) {
       <h4>1. Tạo danh sách tặng quà</h4>
       <ol>
         <li>Bấm <b>+ Tạo danh sách tặng quà</b>.</li>
-        <li>Chọn <b>Dịp tặng quà</b> (VD: <i>Quà tặng khách Tết Âm lịch 2027</i>) và <b>Gói quà</b> — chưa có thì bấm <b>＋</b> để thêm. Nội dung gói quà (gồm những gì, giá trị) do phòng Giám đốc cập nhật. Nhập <b>Ngày tặng dự kiến</b>.</li>
+        <li>Chọn <b>Dịp tặng quà</b> (VD: <i>Quà tặng khách Tết Âm lịch 2027</i>) và <b>Gói quà</b> — chưa có thì bấm <b>＋</b> để thêm. Nội dung gói quà (gồm những gì, giá trị) do phòng Giám đốc cập nhật. Nhập <b>Hạn tặng</b> — hạn chót phải tặng xong.</li>
         <li>Bảng bên dưới là <b>khách hàng do bạn phụ trách</b>. Gõ tìm hoặc lọc Khách cũ / Khách mới, rồi tích chọn từng khách hoặc ô trên cùng để chọn tất cả.</li>
         <li>Bấm <b>Tạo danh sách</b>. Khách đã có trong cùng đợt sẽ hiện "Đã có trong đợt này" và không bị tạo trùng.</li>
       </ol>
 
-      <h4>2. Hoàn thành tặng quà</h4>
+      <h4>2. Lên kế hoạch tặng</h4>
+      <ol>
+        <li>Ở cột <b>Lịch tặng</b>, chọn ngày bạn sẽ đi tặng khách đó (phải trước hạn tặng).</li>
+        <li>Lên lịch nhiều khách cùng ngày: tích chọn các dòng → bấm <b>📅 Lên lịch tặng</b>.</li>
+        <li>Tab <b>📅 Kế hoạch theo ngày</b>: xem hôm nay cần tặng khách nào, khách trễ hẹn, khách đã tặng trong ngày; bấm ✓ Đã tặng ngay tại đó. Dải 7 ngày phía trên cho biết số khách đã hẹn từng ngày.</li>
+        <li>Ô <b>Chưa lên lịch</b> cho biết còn bao nhiêu khách chưa hẹn ngày.</li>
+      </ol>
+
+      <h4>3. Hoàn thành tặng quà</h4>
       <ol>
         <li>Ở dòng khách, bấm <b>✓ Đã tặng</b>.</li>
         <li>Chọn <b>Ngày tặng khách</b> (mặc định hôm nay), thêm ghi chú nếu cần, rồi bấm <b>Xác nhận</b>.</li>
@@ -495,11 +524,117 @@ function HelpPanel({ onClose }) {
         <li>Bấm nhầm thì bấm <b>Hoàn tác</b> để trả về Chưa tặng.</li>
       </ol>
 
-      <h4>3. Tình trạng</h4>
-      <p><span className="badge amber">Chưa tặng</span> chưa giao quà · <span className="badge red">quá hạn</span> đã qua ngày dự kiến mà chưa tặng · <span className="badge green">Đã tặng</span> đã giao · <span className="badge">Hủy</span> không tặng nữa (không tính vào báo cáo; đổi ở nút <b>Sửa</b>).</p>
+      <h4>4. Tình trạng</h4>
+      <p><span className="badge amber">Chưa tặng</span> chưa giao quà · <span className="badge red">trễ hẹn</span> đã qua ngày hẹn trong lịch tặng · <span className="badge red">quá hạn</span> đã qua hạn tặng mà chưa tặng · <span className="badge green">Đã tặng</span> đã giao · <span className="badge">Hủy</span> không tặng nữa (không tính vào báo cáo; đổi ở nút <b>Sửa</b>).</p>
 
-      <h4>4. Báo cáo</h4>
+      <h4>5. Báo cáo</h4>
       <p>Ô số liệu phía trên cho biết tổng khách cần tặng, đã tặng, chưa tặng, quá hạn — bấm vào ô để lọc nhanh. Tab <b>Báo cáo theo nhân viên</b> cho số đã/chưa tặng của từng sale; bấm tên để xem danh sách khách. Nút <b>⬇ Excel</b> xuất cả danh sách và báo cáo.</p>
     </aside>
+  );
+}
+
+function ScheduleModal({ items, onClose }) {
+  const { profile } = useApp();
+  const [date, setDate] = useState(today());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const late = items.filter((g) => g.planDate && date > g.planDate).length;
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true); setErr('');
+    try {
+      for (let i = 0; i < items.length; i += 400) {
+        const b = writeBatch(db);
+        items.slice(i, i + 400).forEach((g) => b.update(doc(db, 'gifts', g.id), { schedDate: date, updatedAt: serverTimestamp(), updatedBy: profile.email }));
+        await b.commit();
+      }
+      onClose(true);
+    } catch (e2) { setErr(e2.message); setBusy(false); }
+  };
+  return (
+    <Modal title={`Lên lịch tặng · ${items.length} khách`} onClose={() => onClose(false)}>
+      <form onSubmit={submit}>
+        <Field label="Ngày đi tặng" required><input type="date" value={date} onChange={(e) => setDate(e.target.value)} required /></Field>
+        {late > 0 && <div className="error-box" style={{ marginTop: 8 }}>⚠ {late} khách có hạn tặng trước ngày này.</div>}
+        <div className="small" style={{ marginTop: 8 }}>{items.map((g) => g.customerName).join(', ')}</div>
+        {err && <div className="error-box">{err}</div>}
+        <div className="form-actions">
+          <button type="button" className="btn" onClick={() => onClose(false)}>Hủy</button>
+          <button className="btn primary" disabled={busy}>📅 Lưu lịch</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// Kế hoạch theo ngày: hôm nay tặng ai, ai trễ hẹn, đã tặng được bao nhiêu (theo từng sale với Admin)
+function DayPlan({ data, isAdmin, staffName, canEdit, onDone, onSched }) {
+  const [day, setDay] = useState(today());
+  const active = data.filter((g) => g.status !== 'Hủy');
+  const due = active.filter((g) => g.status === 'Chưa tặng' && g.schedDate === day);
+  const late = active.filter((g) => g.status === 'Chưa tặng' && g.schedDate && g.schedDate < day);
+  const doneDay = active.filter((g) => g.status === 'Đã tặng' && g.giftDate === day);
+  const plannedDay = active.filter((g) => g.schedDate === day);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(today(), i));
+  const byStaff = useMemo(() => {
+    const m = new Map();
+    const get = (e) => { if (!m.has(e)) m.set(e, { e, name: staffName(e) || e, plan: 0, done: 0, open: 0, late: 0, unsched: 0 }); return m.get(e); };
+    active.forEach((g) => {
+      const s = get(g.ownerEmail || '');
+      if (g.schedDate === day) { s.plan++; if (g.status === 'Chưa tặng') s.open++; }
+      if (g.status === 'Đã tặng' && g.giftDate === day) s.done++;
+      if (g.status === 'Chưa tặng' && g.schedDate && g.schedDate < day) s.late++;
+      if (g.status === 'Chưa tặng' && !g.schedDate) s.unsched++;
+    });
+    return [...m.values()].filter((s) => s.plan || s.done || s.late || s.unsched).sort((a, b) => a.name.localeCompare(b.name));
+  }, [active, day, staffName]);
+  const table = (list, kind) => list.length === 0 ? <Empty text={kind === 'due' ? 'Không có khách hẹn tặng ngày này' : 'Không có'} /> : (
+    <table>
+      <thead><tr>{isAdmin && <th>Nhân viên</th>}<th>Mã KH</th><th>Tên khách hàng</th><th>Đợt / Quà</th><th>Hạn tặng</th>{kind !== 'done' && <th>Lịch tặng</th>}{kind === 'done' && <th>Ghi chú</th>}<th></th></tr></thead>
+      <tbody>{list.map((g) => (
+        <tr key={g.id}>
+          {isAdmin && <td>{staffName(g.ownerEmail)}</td>}
+          <td className="nowrap">{g.customerCode}</td><td>{g.customerName}</td>
+          <td>{g.campaign}{g.giftName && <div className="small">🎁 {g.giftName}</div>}</td>
+          <td className="nowrap" style={{ color: isOverdue(g, day) ? 'var(--red)' : undefined }}>{fmtDate(g.planDate)}</td>
+          {kind !== 'done' && <td className="nowrap">{canEdit(g) ? <input type="date" className={'sched-input' + (kind === 'late' ? ' late' : '')} value={g.schedDate || ''} onChange={(e) => onSched(g, e.target.value)} /> : fmtDate(g.schedDate)}</td>}
+          {kind === 'done' && <td>{g.note}</td>}
+          <td className="nowrap">{kind !== 'done' && canEdit(g) && <button className="btn sm primary" onClick={() => onDone([g])}>✓ Đã tặng</button>}</td>
+        </tr>))}</tbody>
+    </table>
+  );
+  return (
+    <div>
+      <div className="day-strip">
+        <button className="btn sm" onClick={() => setDay(addDays(day, -1))}>◀</button>
+        <input type="date" value={day} onChange={(e) => e.target.value && setDay(e.target.value)} />
+        <button className="btn sm" onClick={() => setDay(addDays(day, 1))}>▶</button>
+        {day !== today() && <button className="btn sm" onClick={() => setDay(today())}>Hôm nay</button>}
+        <div className="day-chips">
+          {days.map((d) => {
+            const n = active.filter((g) => g.status === 'Chưa tặng' && g.schedDate === d).length;
+            return <button key={d} className={'chip' + (d === day ? ' on' : '')} onClick={() => setDay(d)}>{d === today() ? 'Hôm nay' : `${wd(d)} ${d.slice(8)}/${d.slice(5, 7)}`} · <b>{n}</b></button>;
+          })}
+        </div>
+      </div>
+      <div className="stats">
+        <Stat label={`Hẹn tặng ${fmtDate(day)}`} value={fmtInt(plannedDay.length)} />
+        <Stat label="Đã tặng trong ngày" value={fmtInt(doneDay.length)} sub={`Đạt ${pct(plannedDay.filter((g) => g.status === 'Đã tặng').length, plannedDay.length)} kế hoạch`} tone="green" />
+        <Stat label="Còn phải tặng" value={fmtInt(due.length)} tone="amber" />
+        <Stat label="Trễ hẹn từ trước" value={fmtInt(late.length)} sub="Hẹn ngày trước, chưa tặng" tone="red" />
+      </div>
+      {isAdmin && byStaff.length > 0 && <>
+        <h3 className="gift-h">Báo cáo ngày theo nhân viên</h3>
+        <div className="table-wrap"><table>
+          <thead><tr><th>Nhân viên</th><th className="num">Hẹn tặng</th><th className="num">Đã tặng trong ngày</th><th className="num">Còn phải tặng</th><th className="num">Trễ hẹn</th><th className="num">Chưa lên lịch</th></tr></thead>
+          <tbody>{byStaff.map((s) => <tr key={s.e}><td>{s.name}</td><td className="num">{s.plan}</td><td className="num" style={{ color: 'var(--green)' }}>{s.done}</td><td className="num" style={{ color: 'var(--amber)' }}>{s.open}</td><td className="num" style={{ color: s.late ? 'var(--red)' : undefined }}>{s.late}</td><td className="num">{s.unsched}</td></tr>)}</tbody>
+        </table></div>
+      </>}
+      <h3 className="gift-h">Cần tặng ngày {fmtDate(day)} ({due.length})</h3>
+      <div className="table-wrap">{table(due, 'due')}</div>
+      {late.length > 0 && <><h3 className="gift-h" style={{ color: 'var(--red)' }}>Trễ hẹn – chưa tặng ({late.length})</h3><div className="table-wrap">{table(late, 'late')}</div></>}
+      <h3 className="gift-h" style={{ color: 'var(--green)' }}>Đã tặng ngày {fmtDate(day)} ({doneDay.length})</h3>
+      <div className="table-wrap">{table(doneDay, 'done')}</div>
+    </div>
   );
 }

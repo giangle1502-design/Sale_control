@@ -261,3 +261,8 @@ tr.gift-sub table { background: #fff; border: 1px solid var(--line); border-radi
 .select-add { display: flex; gap: 6px; align-items: center; }
 .select-add select { flex: 1; min-width: 0; }
 .btn.plus { flex: none; font-weight: 700; }
+.sched-input { padding: 3px 6px; font-size: 13px; width: 132px; }
+.sched-input.late { border-color: var(--red); color: var(--red); }
+.day-strip { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+.day-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-left: 6px; }
+.gift-h { font-size: 15px; margin: 16px 0 6px; }

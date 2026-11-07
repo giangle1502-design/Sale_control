@@ -23,11 +23,12 @@ export function Modal({ title, onClose, children, wide }) {
   );
 }
 
-export function Field({ label, required, children, full }) {
+export function Field({ label, required, children, full, hint }) {
   return (
     <label className={'field' + (full ? ' full' : '')}>
       <span>{label}{required && <b className="req"> *</b>}</span>
       {children}
+      {hint && <small className="small">{hint}</small>}
     </label>
   );
 }
