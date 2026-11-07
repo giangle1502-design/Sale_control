@@ -71,11 +71,28 @@ export default function Gifts() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [active, staffName]);
 
-  const visibleIds = rows.filter((g) => g.status === 'Chưa tặng').map((g) => g.id);
+  const canEdit = (g) => isAdmin || g.ownerEmail === email;
+  const visibleIds = rows.filter(canEdit).map((g) => g.id);
   const allPicked = visibleIds.length > 0 && visibleIds.every((id) => picked.has(id));
   const togglePick = (id) => setPicked((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleAll = () => setPicked(allPicked ? new Set() : new Set(visibleIds));
-  const canEdit = (g) => isAdmin || g.ownerEmail === email;
+  const pickedRows = data.filter((g) => picked.has(g.id));
+  const pickedOpen = pickedRows.filter((g) => g.status === 'Chưa tặng');
+  const [deleting, setDeleting] = useState(false);
+  const bulkDelete = async () => {
+    const given = pickedRows.filter((g) => g.status === 'Đã tặng').length;
+    if (!window.confirm(`Xóa ${pickedRows.length} khách khỏi danh sách tặng quà?${given ? `\n(Trong đó ${given} khách đã tặng — xóa sẽ mất lịch sử đã tặng.)` : ''}\nKhông khôi phục được.`)) return;
+    setDeleting(true);
+    try {
+      for (let i = 0; i < pickedRows.length; i += 400) {
+        const b = writeBatch(db);
+        pickedRows.slice(i, i + 400).forEach((g) => b.delete(doc(db, 'gifts', g.id)));
+        await b.commit();
+      }
+      setPicked(new Set());
+    } catch (e) { window.alert('Lỗi: ' + e.message); }
+    setDeleting(false);
+  };
 
   const undo = async (g) => {
     if (!window.confirm(`Chuyển "${g.customerName}" về Chưa tặng?`)) return;
@@ -149,7 +166,8 @@ export default function Gifts() {
             {picked.size > 0 && (
               <div className="gift-bulk">
                 Đã chọn <b>{picked.size}</b> khách
-                <button className="btn primary sm" onClick={() => setDoneFor(data.filter((g) => picked.has(g.id)))}>✓ Đánh dấu đã tặng</button>
+                {pickedOpen.length > 0 && <button className="btn primary sm" onClick={() => setDoneFor(pickedOpen)}>✓ Đánh dấu đã tặng ({pickedOpen.length})</button>}
+                <button className="btn danger sm" disabled={deleting} onClick={bulkDelete}>🗑 Xóa {pickedRows.length} khách đã chọn</button>
                 <button className="btn sm" onClick={() => setPicked(new Set())}>Bỏ chọn</button>
               </div>
             )}
@@ -157,14 +175,14 @@ export default function Gifts() {
               {rows.length === 0 ? <Empty text={data.length ? 'Không có khách nào khớp bộ lọc' : 'Chưa có danh sách tặng quà. Bấm "+ Tạo danh sách tặng quà" để bắt đầu.'} /> : (
                 <table>
                   <thead><tr>
-                    <th><input type="checkbox" checked={allPicked} onChange={toggleAll} title="Chọn tất cả khách chưa tặng" /></th>
+                    <th><input type="checkbox" checked={allPicked} onChange={toggleAll} title="Chọn tất cả khách đang hiển thị" /></th>
                     {isAdmin && <th>Nhân viên</th>}
                     <th>Mã KH</th><th>Tên khách hàng</th><th>Đợt / Quà</th><th>Ngày tặng dự kiến</th><th>Ngày tặng khách</th><th>Tình trạng</th><th></th>
                   </tr></thead>
                   <tbody>
                     {rows.map((g) => (
                       <tr key={g.id} className={g.status === 'Hủy' ? 'muted' : ''}>
-                        <td>{g.status === 'Chưa tặng' && canEdit(g) && <input type="checkbox" checked={picked.has(g.id)} onChange={() => togglePick(g.id)} />}</td>
+                        <td>{canEdit(g) && <input type="checkbox" checked={picked.has(g.id)} onChange={() => togglePick(g.id)} />}</td>
                         {isAdmin && <td>{staffName(g.ownerEmail)}</td>}
                         <td className="nowrap">{g.customerCode}</td>
                         <td>{g.customerName}{g.note && <div className="small">{g.note}</div>}</td>
@@ -469,6 +487,7 @@ function HelpPanel({ onClose }) {
         <li>Ở dòng khách, bấm <b>✓ Đã tặng</b>.</li>
         <li>Chọn <b>Ngày tặng khách</b> (mặc định hôm nay), thêm ghi chú nếu cần, rồi bấm <b>Xác nhận</b>.</li>
         <li>Tặng nhiều khách cùng ngày: tích chọn các dòng ở cột đầu → bấm <b>✓ Đánh dấu đã tặng</b> trên đầu bảng.</li>
+        <li>Xóa nhiều khách khỏi danh sách: tích chọn (hoặc ô trên cùng để chọn tất cả theo bộ lọc) → bấm <b>🗑 Xóa</b>.</li>
         <li>Bấm nhầm thì bấm <b>Hoàn tác</b> để trả về Chưa tặng.</li>
       </ol>
 
