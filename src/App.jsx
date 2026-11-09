@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import HrFrame from './pages/HrFrame';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { sendEmailVerification } from 'firebase/auth';
 import { useApp } from './context/AppContext';
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="cong-no" element={<Debts />} />
         <Route path="cong-viec" element={<Tasks />} />
         <Route path="qua-tang" element={<Gifts />} />
+        <Route path="ns/:page" element={<HrFrame />} />
         <Route path="mua-hang" element={<PurchaseRequests />} />
         <Route path="hang-da-xuat" element={<Shipments />} />
         <Route path="ton-kho" element={<Inventory />} />

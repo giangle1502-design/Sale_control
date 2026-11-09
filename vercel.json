@@ -9,6 +9,14 @@
       "destination": "https://salecontrol-4d533.firebaseapp.com/__/firebase/:path*"
     },
     {
+      "source": "/nhan-su",
+      "destination": "https://quanlynhansu-omega.vercel.app/nhan-su/"
+    },
+    {
+      "source": "/nhan-su/:path*",
+      "destination": "https://quanlynhansu-omega.vercel.app/nhan-su/:path*"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

@@ -224,15 +224,26 @@ service cloud.firestore {
     match /vehicleBookings/{id} {
       allow read: if isEmp();
       allow create: if isEmp() && ownsNew() && (request.resource.data.status == 'Chờ duyệt'
-        || (request.resource.data.status == 'Đã duyệt' && (bookingAuto() || hasPerm('noApprovalBooking', ['giam_doc'])
+        || (request.resource.data.status == 'Đã duyệt' && (bookingAuto() || request.resource.data.get('transport', '') == 'Xe công ty' || hasPerm('noApprovalBooking', ['giam_doc'])
             || (request.resource.data.forDirector == true && hasPerm('bookForDirector', ['tai_xe', 'hanh_chinh', 'admin'])))));
       allow update: if isEmp() && (hasRole(['admin']) || hasPerm('manageFleet', ['hanh_chinh', 'admin'])
         || (me() in resource.data.get('watchers', []) && !ownsExisting())
         || (ownsExisting() && ownsNew() && (request.resource.data.status != 'Đã duyệt' || resource.data.status == 'Đã duyệt'))
+        // Người đặt sau lấy xe khi người đặt trước đồng ý nhường: hủy chuyến cũ, ghi rõ người nhận xe
+        || (resource.data.status in ['Chờ duyệt', 'Đang duyệt', 'Chờ bổ sung', 'Đã duyệt'] && resource.data.get('forDirector', false) != true
+            && request.resource.data.status == 'Đã hủy' && request.resource.data.yieldTo == me()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelReason', 'yieldTo', 'yieldToName', 'yieldAt', 'updatedAt', 'updatedBy']))
         // Tài xế được phân công: xác nhận về / trả xe
         || (resource.data.get('driverEmail', '') == me() && resource.data.status == 'Đã duyệt' && request.resource.data.status == 'Hoàn tất'
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'actualEnd', 'end', 'kmStart', 'kmEnd', 'tripNote', 'late', 'costs', 'actualCost', 'paymentId', 'paymentCode', 'updatedAt', 'updatedBy'])));
       allow delete: if hasRole(['admin']);
+    }
+    // Thông báo trong app (nhường xe…): người nhận đọc / đánh dấu đã xem; nhân viên gửi được
+    match /hrNotices/{id} {
+      allow read: if signedIn() && resource.data.to == me();
+      allow create: if isEmp() && request.resource.data.from == me();
+      allow update: if signedIn() && resource.data.to == me() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+      allow delete: if signedIn() && resource.data.to == me();
     }
     // Kế hoạch công việc
     match /workTasks/{id} {

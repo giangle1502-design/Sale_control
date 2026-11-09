@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { prUrgency, usePendingPurchases } from '../pages/PurchaseRequests';
 import { useChatAlerts } from '../pages/Chat';
 import { useColumnResize } from '../lib/colResize';
+import { HR_NAV } from '../pages/HrFrame';
 
 const NAV = [
   ['/', '📊', 'Tổng quan'],
@@ -50,12 +51,16 @@ export default function Layout() {
               )}
             </NavLink>
           ))}
+          <div className="nav-group">Nhân sự & công tác</div>
+          {HR_NAV.map(([p, icon, label]) => (
+            <NavLink key={p} to={'/ns/' + p} onClick={() => setOpen(false)}><span className="ico">{icon}</span>{label}</NavLink>
+          ))}
         </nav>
         <div className="me">
           <div><b>{profile.name}</b><small>{profile.email}</small>
             <small className="role">{isAdmin ? 'Quản trị' : isAccountant ? 'Kế toán' : 'Nhân viên sale'}</small></div>
           {isAdmin && <a className="btn ghost sm" href="https://sale-hat-mau.vercel.app" title="Chuyển sang app Sale Hạt Màu">⇄ Sale Hạt Màu</a>}
-          <a className="btn ghost sm" href="https://quanlynhansu-omega.vercel.app" title="Nghỉ phép, đặt xe, lịch xe trống">⇄ Nhân sự (nghỉ phép, đặt xe)</a>
+          <a className="btn ghost sm" href="/nhan-su/" title="Mở đầy đủ app Nhân sự (nghỉ phép, phân quyền…)">⇄ App Nhân sự đầy đủ</a>
           <button className="btn ghost sm" onClick={logout}>Đăng xuất</button>
         </div>
       </aside>

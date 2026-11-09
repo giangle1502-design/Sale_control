@@ -266,3 +266,8 @@ tr.gift-sub table { background: #fff; border: 1px solid var(--line); border-radi
 .day-strip { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
 .day-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-left: 6px; }
 .gift-h { font-size: 15px; margin: 16px 0 6px; }
+
+/* Nhóm menu & khung chức năng Nhân sự */
+.nav-group { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; opacity: .6; padding: 12px 12px 4px; }
+.hr-frame { display: block; width: 100%; height: calc(100vh - 24px); border: 0; background: transparent; }
+@media (max-width: 860px) { .hr-frame { height: calc(100vh - 60px); } }
