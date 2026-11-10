@@ -89,4 +89,4 @@ src/lib/report.js        Tổng hợp số liệu (dùng chung Dashboard và ema
 src/pages/*              Các trang
 firestore.rules          Phân quyền
 firestore.indexes.json   Chỉ mục truy vấn
-`````
+``````
