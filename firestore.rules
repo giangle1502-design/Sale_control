@@ -320,8 +320,22 @@ service cloud.firestore {
       allow update: if isEmp() && (hasRole(['admin'])
         || (me() in resource.data.watchers && !ownsExisting() && request.resource.data.status != 'Đã thanh toán')
         || (ownsExisting() && ownsNew() && request.resource.data.status in ['Chờ duyệt', 'Đang duyệt', 'Đã hủy'])
-        || (hasPerm('payPayments', ['ke_toan_truong', 'admin']) && resource.data.status == 'Đã duyệt' && request.resource.data.status == 'Đã thanh toán'));
+        || (hasPerm('payPayments', ['ke_toan_truong', 'admin']) && resource.data.status == 'Đã duyệt' && request.resource.data.status == 'Đã thanh toán')
+        // Người đề nghị / kế toán bổ sung chứng từ đính kèm (chưa thanh toán)
+        || ((ownsExisting() || hasPerm('payPayments', ['ke_toan_truong', 'admin'])) && resource.data.status != 'Đã thanh toán'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attachments', 'updatedAt', 'updatedBy'])));
       allow delete: if hasRole(['admin']);
+    }
+    // File chứng từ đính kèm (lưu trong Firestore, chia nhiều phần): nhân viên xem; người tải lên ghi / xóa
+    match /hrFiles/{fid} {
+      allow read: if isEmp();
+      allow create: if isEmp() && request.resource.data.ownerEmail == me();
+      allow delete: if isEmp() && (resource.data.ownerEmail == me() || hasRole(['admin']));
+      match /parts/{pid} {
+        allow read: if isEmp();
+        allow create: if isEmp() && getAfter(/databases/$(database)/documents/hrFiles/$(fid)).data.ownerEmail == me();
+        allow delete: if isEmp() && (get(/databases/$(database)/documents/hrFiles/$(fid)).data.ownerEmail == me() || hasRole(['admin']));
+      }
     }
 
     // Giao việc: người giao toàn quyền; người thực hiện cập nhật tiến độ / báo cáo; người theo dõi trao đổi
