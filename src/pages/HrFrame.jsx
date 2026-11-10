@@ -6,6 +6,7 @@ export const HR_NAV = [
   ['dat-xe', '🧳', 'Đề nghị công tác · đặt xe'],
   ['lich-xe', '📅', 'Lịch xe trống'],
   ['xe', '🛻', 'Tình trạng xe'],
+  ['tang-ca', '⏱', 'Tài xế: lịch chạy & tăng ca'],
   ['cham-cong', '🕘', 'Chấm công'],
   ['thanh-toan', '💳', 'Đề nghị thanh toán'],
   ['phe-duyet', '✅', 'Chờ tôi duyệt'],
