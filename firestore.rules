@@ -246,6 +246,16 @@ service cloud.firestore {
       allow update: if signedIn() && resource.data.to == me() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
       allow delete: if signedIn() && resource.data.to == me();
     }
+    // Tình hình mua hàng: mỗi lần import file MUA lưu 1 bản (chia phần 250 dòng)
+    match /purchaseImports/{id} {
+      allow read: if hasPerm('viewPurchase', ['ke_toan_truong', 'giam_doc', 'pho_giam_doc', 'admin']) || hasPerm('importPurchase', ['ke_toan_truong', 'admin']);
+      allow create: if hasPerm('importPurchase', ['ke_toan_truong', 'admin']);
+      allow delete: if hasRole(['admin']);
+      match /parts/{p} {
+        allow read: if hasPerm('viewPurchase', ['ke_toan_truong', 'giam_doc', 'pho_giam_doc', 'admin']) || hasPerm('importPurchase', ['ke_toan_truong', 'admin']);
+        allow create: if hasPerm('importPurchase', ['ke_toan_truong', 'admin']);
+      }
+    }
     // Kế hoạch công việc
     match /workTasks/{id} {
       allow read: if isEmp() && (hasPerm('tasksAll', ['giam_doc', 'pho_giam_doc', 'ke_toan_truong', 'admin']) || me() in resource.data.watchers);
