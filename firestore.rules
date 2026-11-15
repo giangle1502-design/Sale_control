@@ -287,6 +287,20 @@ service cloud.firestore {
       allow delete: if hasRole(['admin']) || hasPerm('lockAttendance', ['nhan_su', 'admin']);
     }
     // Dữ liệu máy chấm công khuôn mặt (nhập Excel): Nhân sự ghi; nhân viên & cấp trên (watchers) xem
+    // Đồng bộ MITA Pro: chương trình trên máy cài MITA Pro gửi giờ chấm kèm mã kết nối (không đăng nhập)
+    match /attInbox/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['key', 'date', 'rows', 'host', 'agent', 'sentAt', 'source', 'info', 'error', 'count'])
+        && request.resource.data.key is string && request.resource.data.key.size() >= 32
+        && exists(/databases/$(database)/documents/hrSecrets/attSync)
+        && request.resource.data.key == get(/databases/$(database)/documents/hrSecrets/attSync).data.key;
+      allow read, delete: if attAll();
+    }
+    match /hrSecrets/{id} {
+      allow read, write: if attAll();
+    }
+    match /attSync/{id} {
+      allow read, write: if attAll();
+    }
     match /faceLogs/{id} {
       allow read: if isEmp() && (attAll() || me() in resource.data.watchers);
       allow write: if attAll();
