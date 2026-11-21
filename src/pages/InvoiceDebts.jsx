@@ -250,10 +250,13 @@ function Statement({ c, period, asOf, onClose, onlyOpen }) {
 }
 
 // ----------------------------------------------------------------------------
-function ImportInvoiceDebts({ metas, onClose }) {
+// Dùng ở tab Theo hóa đơn, và khi kế toán chọn file chi tiết theo hóa đơn ở nút nhập công nợ cũ (initialFile)
+export function ImportInvoiceDebts({ metas: metas0, onClose, initialFile, defaultEntity }) {
   const { email, staffList } = useApp();
+  const invMeta = useMeta('invoiceDebts');
+  const metas = metas0 || invMeta?.entities || {};
   const sales = staffList.filter((s) => s.role !== 'accountant' && s.active !== false);
-  const [entity, setEntity] = useState('');
+  const [entity, setEntity] = useState(defaultEntity || '');
   const [res, setRes] = useState(null);
   const [fileName, setFileName] = useState('');
   const [pick, setPick] = useState({});
@@ -312,6 +315,7 @@ function ImportInvoiceDebts({ metas, onClose }) {
     setErr(''); setDone(''); setRes(null); setPick({});
     try { const wb = await readWorkbook(file); setRes(parseInvoiceDebt(sheetRows(wb, wb.SheetNames[0]))); setFileName(file.name); } catch (e) { setErr(e.message); }
   };
+  useEffect(() => { if (initialFile) load(initialFile); }, [initialFile]);
   const run = async () => {
     if (!entity) return setErr('Chọn pháp nhân (VAP hoặc PLA) của file này.');
     if (missing.length && !window.confirm(`${missing.length} khách chưa gán sale — sale sẽ không thấy các khách này (quản trị / kế toán vẫn thấy). Vẫn nhập?`)) return;

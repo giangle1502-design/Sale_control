@@ -9,6 +9,7 @@ import { exportSheets } from '../lib/excel';
 import { cellText, readWorkbook, sheetRows, toNumber } from '../lib/excelImport';
 import { useCustomers } from '../components/CustomerPicker';
 import { Empty, ErrorBox, Modal, Stat } from '../components/ui';
+import { ImportInvoiceDebts, parseInvoiceDebt } from './InvoiceDebts';
 
 // ============================================================================
 // Công nợ phải thu theo tuổi nợ — nhập từ báo cáo MISA AMIS
@@ -386,12 +387,16 @@ function ImportReceivables({ metas, defaultEntity, onClose, onDone }) {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState('');
   const [done, setDone] = useState('');
+  const [invFile, setInvFile] = useState(null);
 
   const load = async (file) => {
     setErr(''); setDone(''); setRes(null);
     try {
       const wb = await readWorkbook(file);
-      const r = parseAging(sheetRows(wb, wb.SheetNames[0]));
+      const rows0 = sheetRows(wb, wb.SheetNames[0]);
+      // File "Chi tiết công nợ phải thu theo hóa đơn" → chuyển sang màn hình nhập theo hóa đơn (tự tính tuổi nợ)
+      try { parseInvoiceDebt(rows0); setInvFile(file); return; } catch { /* không phải file theo hóa đơn */ }
+      const r = parseAging(rows0);
       if (!r.rows.length) throw new Error('Không đọc được dòng khách hàng nào trong file.');
       setRes(r); setFileName(file.name);
       if (r.asOf) setAsOf(r.asOf);
@@ -447,9 +452,11 @@ function ImportReceivables({ metas, defaultEntity, onClose, onDone }) {
   };
 
   return (
+    invFile ? <ImportInvoiceDebts initialFile={invFile} defaultEntity={entity} onClose={onClose} /> :
     <Modal title={'Nhập công nợ phải thu theo tuổi nợ (MISA AMIS)' + (entity ? ' – ' + entity : '')} onClose={onClose} wide>
       <p className="small">
-        Trên MISA AMIS: <b>Báo cáo → Phân tích công nợ phải thu theo tuổi nợ</b>, chọn nhóm theo <b>Nhóm khách hàng</b> (mỗi nhóm là một sale), xuất Excel rồi chọn file ở đây.
+        <b style={{ color: 'var(--primary)' }}>Khuyên dùng: chọn file "Chi tiết công nợ phải thu theo hóa đơn" — app tự tính tuổi nợ và cập nhật luôn tab Theo hóa đơn.</b><br />
+        Hoặc trên MISA AMIS: <b>Báo cáo → Phân tích công nợ phải thu theo tuổi nợ</b>, chọn nhóm theo <b>Nhóm khách hàng</b> (mỗi nhóm là một sale), xuất Excel rồi chọn file ở đây.
         Sale được gán theo <b>Mã nhóm khách hàng</b> — khớp với <b>Họ tên</b> nhân viên ở mục Nhân viên (VD: DAUQUANGTHANG).
         Mỗi pháp nhân nhập <b>1 file riêng</b>; lần nhập mới chỉ <b>thay thế</b> số liệu cũ của đúng pháp nhân đó.
       </p>
