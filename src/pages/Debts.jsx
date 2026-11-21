@@ -7,6 +7,7 @@ import { exportSheets } from '../lib/excel';
 import CustomerPicker from '../components/CustomerPicker';
 import Receivables from './Receivables';
 import DebtAnalysis from './DebtAnalysis';
+import InvoiceDebts from './InvoiceDebts';
 import PaymentForm from '../components/PaymentForm';
 import {
   confirmDelete, CustomFieldInputs, customValue, Empty, ErrorBox, Field, FilterBar, Modal, Stat, useRange,
@@ -52,15 +53,15 @@ function AccountantDebts() {
     <>
       <div className="page-head"><h1>Công nợ phải thu</h1></div>
       <div className="presets" style={{ marginBottom: 10 }}>
-        {[['acc', 'Công nợ'], ['ana', '📈 Phân tích tuần']].map(([k, l]) => <button key={k} className={'chip' + (tab === k ? ' on' : '')} onClick={() => setTab(k)}>{l}</button>)}
-        {(tab === 'acc' || tab === 'ana') && (
+        {[['acc', 'Công nợ'], ['inv', '🧾 Theo hóa đơn'], ['ana', '📈 Phân tích tuần']].map(([k, l]) => <button key={k} className={'chip' + (tab === k ? ' on' : '')} onClick={() => setTab(k)}>{l}</button>)}
+        {(tab === 'acc' || tab === 'ana' || tab === 'inv') && (
           <select value={staff} onChange={(e) => setStaff(e.target.value)} style={{ marginLeft: 8 }}>
             <option value="">Tất cả nhân viên sale</option>
             {staffList.filter((s) => s.role !== 'accountant').map((s) => <option key={s.email} value={s.email}>{s.name || s.email}</option>)}
           </select>
         )}
       </div>
-      {tab === 'ana' ? <DebtAnalysis staffFilter={staff} /> : <Receivables staffFilter={staff} setStaffFilter={setStaff} />}
+      {tab === 'ana' ? <DebtAnalysis staffFilter={staff} /> : tab === 'inv' ? <InvoiceDebts staffFilter={staff} /> : <Receivables staffFilter={staff} setStaffFilter={setStaff} />}
     </>
   );
 }
@@ -100,13 +101,13 @@ function DebtsMain() {
     })),
   });
 
-  const TABS = [['acc', 'Công nợ (số liệu kế toán)'], ...(isAdmin ? [['ana', '📈 Phân tích tuần']] : []), ['debt', 'Công nợ tính theo đơn hàng'], ['pay', 'Phiếu thu']];
+  const TABS = [['acc', 'Công nợ (số liệu kế toán)'], ['inv', '🧾 Theo hóa đơn'], ...(isAdmin ? [['ana', '📈 Phân tích tuần']] : []), ['debt', 'Công nợ tính theo đơn hàng'], ['pay', 'Phiếu thu']];
   return (
     <>
       <div className="page-head">
         <h1>Công nợ & Thu tiền</h1>
         <div className="actions">
-          {tab !== 'acc' && tab !== 'ana' && <button className="btn" onClick={doExport}>⬇ Excel</button>}
+          {tab !== 'acc' && tab !== 'ana' && tab !== 'inv' && <button className="btn" onClick={doExport}>⬇ Excel</button>}
           <button className="btn primary" onClick={() => setEdit(blank())}>+ Ghi thu tiền</button>
         </div>
       </div>
@@ -119,7 +120,7 @@ function DebtsMain() {
           </select>
         )}
       </div>
-      {tab === 'ana' ? <DebtAnalysis staffFilter={staff} /> : tab === 'acc' ? <Receivables staffFilter={staff} setStaffFilter={setStaff} onCollect={(c, amt) => { setOutstanding(amt); setEdit({ ...blank(), ...c }); }} /> : <>
+      {tab === 'ana' ? <DebtAnalysis staffFilter={staff} /> : tab === 'inv' ? <InvoiceDebts staffFilter={staff} /> : tab === 'acc' ? <Receivables staffFilter={staff} setStaffFilter={setStaff} onCollect={(c, amt) => { setOutstanding(amt); setEdit({ ...blank(), ...c }); }} /> : <>
       {tab === 'pay' && <FilterBar range={range} setRange={setRange} />}
       <div className="stats">
         <Stat label="Tổng còn phải thu" value={fmtMoney(totals.balance) + ' đ'} tone="amber" />

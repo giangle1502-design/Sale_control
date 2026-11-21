@@ -36,7 +36,7 @@ service cloud.firestore {
     // Cài đặt chung
     match /settings/{id} {
       allow read: if isStaff();
-      allow write: if isAdmin() || (id == 'receivables' && isAccountant());
+      allow write: if isAdmin() || (id in ['receivables', 'invoiceDebts', 'invoiceDebtAlias'] && isAccountant());
     }
 
     // Dữ liệu của từng nhân viên: sale chỉ thấy/sửa dữ liệu của mình, admin thấy tất cả
@@ -86,6 +86,12 @@ service cloud.firestore {
 
     // Công nợ nhập từ phần mềm kế toán: sale xem khách của mình; quản trị & kế toán xem tất cả và nhập
     match /receivables/{id} {
+      allow read: if isStaff() && (isAdmin() || isAccountant() || ownsExisting());
+      allow write: if isAdmin() || isAccountant();
+    }
+
+    // Công nợ chi tiết theo hóa đơn (MISA): sale xem hóa đơn khách của mình; quản trị & kế toán xem tất cả và nhập
+    match /invoiceDebts/{id} {
       allow read: if isStaff() && (isAdmin() || isAccountant() || ownsExisting());
       allow write: if isAdmin() || isAccountant();
     }
