@@ -271,3 +271,7 @@ tr.gift-sub table { background: #fff; border: 1px solid var(--line); border-radi
 .nav-group { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; opacity: .6; padding: 12px 12px 4px; }
 .hr-frame { display: block; width: 100%; height: calc(100vh - 24px); border: 0; background: transparent; }
 @media (max-width: 860px) { .hr-frame { height: calc(100vh - 60px); } }
+
+/* Bảng báo cáo: vạch "|" giữa các cột */
+.ct-grid th, .ct-grid td { border-right: 1px solid var(--border, #d8dee8); }
+.ct-grid th:last-child, .ct-grid td:last-child { border-right: 0; }

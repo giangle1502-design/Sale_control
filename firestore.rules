@@ -36,7 +36,8 @@ service cloud.firestore {
     // Cài đặt chung
     match /settings/{id} {
       allow read: if isStaff();
-      allow write: if isAdmin() || (id in ['receivables', 'invoiceDebts', 'invoiceDebtAlias'] && isAccountant());
+      allow write: if isAdmin() || (id in ['receivables', 'invoiceDebts', 'invoiceDebtAlias'] && isAccountant())
+                    || (id == 'debtNoteActions' && isStaff() && request.resource.data.keys().hasOnly(['list']));
     }
 
     // Dữ liệu của từng nhân viên: sale chỉ thấy/sửa dữ liệu của mình, admin thấy tất cả
@@ -94,6 +95,13 @@ service cloud.firestore {
     match /invoiceDebts/{id} {
       allow read: if isStaff() && (isAdmin() || isAccountant() || ownsExisting());
       allow write: if isAdmin() || isAccountant();
+    }
+
+    // Ghi nhận công nợ của sale (báo khách thanh toán / phản hồi của khách): thời gian do máy chủ ghi, không sửa
+    match /debtNotes/{id} {
+      allow read: if isStaff() && (isAdmin() || isAccountant() || resource.data.by == me() || resource.data.custOwner == me());
+      allow create: if isStaff() && request.resource.data.by == me() && request.resource.data.at == request.time;
+      allow delete: if isAdmin();
     }
 
     // Bản chụp công nợ theo ngày (phân tích tuần): chỉ quản trị & kế toán

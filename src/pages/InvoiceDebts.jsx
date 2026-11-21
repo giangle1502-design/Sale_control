@@ -7,6 +7,7 @@ import { fmtDate, norm, num, today } from '../lib/utils';
 import { exportSheets } from '../lib/excel';
 import { cellText, readWorkbook, sheetRows, toNumber, toYmd } from '../lib/excelImport';
 import { Empty, ErrorBox, Modal, Stat } from '../components/ui';
+import { LastNote, NoteModal, useDebtNotes } from './DebtNotes';
 import { DEFAULT_BUCKETS, ENTITIES, entityLabel, entityMetas, saveSnapshot } from './Receivables';
 
 // Tuổi nợ tính từ file chi tiết theo hóa đơn: số ngày quá hạn = ngày tính − hạn thanh toán (không có hạn thì lấy ngày hóa đơn)
@@ -94,6 +95,9 @@ export default function InvoiceDebts({ staffFilter }) {
   const [imp, setImp] = useState(false);
   const [card, setCard] = useState(null);
   const [open, setOpen] = useState({});
+  const [noteFor, setNoteFor] = useState(null);
+  const notesQ = useDebtNotes();
+  const notesBy = useMemo(() => { const m = new Map(); notesQ.data.forEach((n) => { const k = n.entity + '|' + n.customerKey; if (!m.has(k)) m.set(k, []); m.get(k).push(n); }); return m; }, [notesQ.data]);
 
   const ents = ENTITIES.map((e) => e[0]).filter((e) => metas[e]?.batchId);
   const shown = ent === 'ALL' ? ents : ents.filter((e) => e === ent);
@@ -169,13 +173,16 @@ export default function InvoiceDebts({ staffFilter }) {
               <span className="small"> · Đã thu </span><b style={{ color: 'var(--green)' }}>{money(c.paid)}</b>
               <span className="small"> · Còn nợ </span><b style={{ color: 'var(--red)' }}>{money(c.remaining)}</b>
               {c.late > 0 && <span className="badge red" style={{ marginLeft: 6 }}>Quá hạn {money(c.late)}</span>}
-              <button className="btn sm primary" style={{ marginLeft: 8 }} onClick={(e) => { e.stopPropagation(); setCard(c); }}>📷 Bảng gửi khách</button>
+              <button className="btn sm" style={{ marginLeft: 8 }} onClick={(e) => { e.stopPropagation(); setNoteFor(c); }}>📝 Ghi nhận{notesBy.get(c.key)?.length ? ` (${notesBy.get(c.key).length})` : ''}</button>
+              <button className="btn sm primary" style={{ marginLeft: 6 }} onClick={(e) => { e.stopPropagation(); setCard(c); }}>📷 Bảng gửi khách</button>
             </div>
           </div>
+          <LastNote notes={notesBy.get(c.key) || []} />
           {open[c.key] && <InvoiceTable list={c.list} ref0={ref} />}
         </div>
       ))}
       {imp && <ImportInvoiceDebts metas={metas} onClose={() => setImp(false)} />}
+      {noteFor && <NoteModal c={noteFor} notes={notesBy.get(noteFor.key) || []} onClose={() => setNoteFor(null)} />}
       {card && <Statement c={card} period={metas[card.entity]?.period} asOf={metas[card.entity]?.asOf} onClose={() => setCard(null)} onlyOpen={onlyOpen} />}
     </>
   );
