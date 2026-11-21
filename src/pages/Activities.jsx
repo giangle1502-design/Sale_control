@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useQuery } from '../lib/hooks';
 import { ensureCustomer, removeDoc, saveDoc, scopedQuery } from '../lib/data';
-import { fmtDate, today } from '../lib/utils';
+import { fmtDate, norm, today } from '../lib/utils';
 import { exportSheets } from '../lib/excel';
-import CustomerPicker from '../components/CustomerPicker';
+import CustomerPicker, { useCustomers } from '../components/CustomerPicker';
+import ColumnTable from '../components/ColumnTable';
 import {
-  confirmDelete, CustomFieldInputs, customValue, Empty, ErrorBox, Field, FilterBar, Modal, useRange,
+  confirmDelete, CustomFieldInputs, customValue, ErrorBox, Field, FilterBar, Modal, useRange,
 } from '../components/ui';
 
 const blank = () => ({ date: today(), customerId: '', customerName: '', type: '', content: '', result: '', nextAction: '', nextDate: '', custom: {} });
@@ -24,11 +25,29 @@ export default function Activities() {
     [email, isAdmin, staff, range.from, range.to]
   );
   const rows = data.filter((r) => !type || r.type === type);
+  // Thông tin khách lấy từ danh mục Khách hàng (theo mã khách đã chọn, không có thì theo tên)
+  const custs = useCustomers(staff).data;
+  const custOf = useMemo(() => {
+    const byId = new Map(custs.map((c) => [c.id, c])); const byName = new Map(custs.map((c) => [norm(c.name), c]));
+    return (r) => byId.get(r.customerId) || byName.get(norm(r.customerName)) || {};
+  }, [custs]);
+  const CUST = [['company', 'Tên công ty', (c) => c.name], ['taxCode', 'MST', (c) => c.taxCode], ['address', 'Địa chỉ', (c) => c.address], ['contact', 'Người liên hệ', (c) => c.contact], ['phone', 'SĐT', (c) => c.phone]];
+  const columns = [
+    { k: 'date', l: 'Ngày', v: (r) => fmtDate(r.date), cls: 'nowrap' },
+    ...(isAdmin ? [{ k: 'staff', l: 'Nhân viên', v: (r) => staffName(r.ownerEmail) }] : []),
+    { k: 'cust', l: 'Khách hàng', v: (r) => r.customerName },
+    ...CUST.map(([k, l, f]) => ({ k, l, v: (r) => f(custOf(r)) || '', cls: ['taxCode', 'phone'].includes(k) ? 'nowrap' : '' })),
+    { k: 'type', l: 'Loại', v: (r) => r.type, render: (r) => <span className="badge blue">{r.type}</span> },
+    { k: 'content', l: 'Nội dung / Kết quả', v: (r) => [r.content, r.result && '→ ' + r.result].filter(Boolean).join(' '), render: (r) => <>{r.content}{r.result && <div className="act-result">→ {r.result}</div>}</> },
+    { k: 'next', l: 'Việc tiếp theo', v: (r) => [r.nextAction, r.nextDate && 'Hẹn: ' + fmtDate(r.nextDate)].filter(Boolean).join(' '), render: (r) => <>{r.nextAction}{r.nextDate && <div className="small">Hẹn: {fmtDate(r.nextDate)}</div>}</> },
+    ...fields.map((f) => ({ k: 'cf_' + f.key, l: f.label, v: (r) => String(customValue(f, r.custom?.[f.key]) ?? '') })),
+  ];
 
   const doExport = () => {
     exportSheets(`HoatDong_${range.from}_${range.to}`, {
       'Hoạt động': rows.map((r) => ({
-        Ngày: fmtDate(r.date), 'Nhân viên': staffName(r.ownerEmail), 'Khách hàng': r.customerName, Loại: r.type,
+        Ngày: fmtDate(r.date), 'Nhân viên': staffName(r.ownerEmail), 'Khách hàng': r.customerName,
+        ...Object.fromEntries(CUST.map(([, l, fn]) => [l, fn(custOf(r)) || ''])), Loại: r.type,
         'Nội dung': r.content, 'Kết quả': r.result, 'Việc tiếp theo': r.nextAction, 'Hẹn ngày': fmtDate(r.nextDate),
         ...Object.fromEntries(fields.map((f) => [f.label, customValue(f, r.custom?.[f.key])])),
       })),
@@ -51,35 +70,11 @@ export default function Activities() {
         </select>
       </FilterBar>
       <ErrorBox error={error} />
-      <div className="table-wrap">
-        {rows.length === 0 ? <Empty /> : (
-          <table>
-            <thead><tr>
-              <th>Ngày</th>{isAdmin && <th>Nhân viên</th>}<th>Khách hàng</th><th>Loại</th><th>Nội dung / Kết quả</th><th>Việc tiếp theo</th>
-              {fields.map((f) => <th key={f.key}>{f.label}</th>)}<th></th>
-            </tr></thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="nowrap">{fmtDate(r.date)}</td>
-                  {isAdmin && <td>{staffName(r.ownerEmail)}</td>}
-                  <td>{r.customerName}</td>
-                  <td><span className="badge blue">{r.type}</span></td>
-                  <td>{r.content}{r.result && <div className="act-result">→ {r.result}</div>}</td>
-                  <td>{r.nextAction}{r.nextDate && <div className="small">Hẹn: {fmtDate(r.nextDate)}</div>}</td>
-                  {fields.map((f) => <td key={f.key}>{String(customValue(f, r.custom?.[f.key]))}</td>)}
-                  <td className="nowrap">
-                    {(isAdmin || r.ownerEmail === email) && <>
-                      <button className="btn sm" onClick={() => setEdit(r)}>Sửa</button>{' '}
-                      <button className="btn sm danger" onClick={() => confirmDelete() && removeDoc('activities', r.id)}>Xóa</button>
-                    </>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <ColumnTable id="activities" columns={columns} rows={rows} noExport empty="Chưa có dữ liệu"
+        actions={(r) => (isAdmin || r.ownerEmail === email) && <>
+          <button className="btn sm" onClick={() => setEdit(r)}>Sửa</button>{' '}
+          <button className="btn sm danger" onClick={() => confirmDelete() && removeDoc('activities', r.id)}>Xóa</button>
+        </>} />
       {edit && <ActivityForm initial={edit} onClose={() => setEdit(null)} profile={profile} config={config} fields={fields} />}
     </>
   );

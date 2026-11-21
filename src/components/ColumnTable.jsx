@@ -26,7 +26,7 @@ function test(val, op, q) {
   return true;
 }
 
-export default function ColumnTable({ id, columns, rows, exportName, empty, rowKey }) {
+export default function ColumnTable({ id, columns, rows, exportName, empty, rowKey, actions, noExport }) {
   const { email, isAdmin } = useApp();
   const lsKey = `ct.${id}.${email}`;
   const [def, setDef] = useState(null);
@@ -48,7 +48,7 @@ export default function ColumnTable({ id, columns, rows, exportName, empty, rowK
       <div className="filters" style={{ marginBottom: 8 }}>
         <button className="btn sm" onClick={() => setPick(true)}>☰ Chọn / sắp xếp cột</button>
         <button className="btn sm" onClick={() => setConds([...conds, { k: shown[0]?.k || '', op: 'has', q: '' }])}>🔎 + Điều kiện lọc</button>
-        <button className="btn sm" onClick={doExport} disabled={!list.length}>⬇ Excel</button>
+        {!noExport && <button className="btn sm" onClick={doExport} disabled={!list.length}>⬇ Excel</button>}
         <span className="small">{list.length.toLocaleString('en-US')} dòng</span>
       </div>
       {conds.map((c, i) => {
@@ -66,8 +66,8 @@ export default function ColumnTable({ id, columns, rows, exportName, empty, rowK
       {!list.length ? <Empty text={empty} /> : (
         <div className="table-wrap">
           <table className="ct-grid">
-            <thead><tr>{shown.map((c) => <th key={c.k} className={c.num ? 'num' : ''}>{c.l}</th>)}</tr></thead>
-            <tbody>{list.map((r, i) => <tr key={rowKey ? rowKey(r) : r.id || i}>{shown.map((c) => <td key={c.k} className={c.num ? 'num' : ''}>{c.render ? c.render(r) : c.num ? num(c.v(r)).toLocaleString('en-US') : c.v(r)}</td>)}</tr>)}</tbody>
+            <thead><tr>{shown.map((c) => <th key={c.k} className={c.num ? 'num' : ''}>{c.l}</th>)}{actions && <th />}</tr></thead>
+            <tbody>{list.map((r, i) => <tr key={rowKey ? rowKey(r) : r.id || i}>{shown.map((c) => <td key={c.k} className={(c.num ? 'num ' : '') + (c.cls || '')}>{c.render ? c.render(r) : c.num ? num(c.v(r)).toLocaleString('en-US') : c.v(r)}</td>)}{actions && <td className="nowrap">{actions(r)}</td>}</tr>)}</tbody>
           </table>
         </div>
       )}
