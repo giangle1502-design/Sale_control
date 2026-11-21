@@ -96,6 +96,7 @@ export default function InvoiceDebts({ staffFilter }) {
   const [card, setCard] = useState(null);
   const [open, setOpen] = useState({});
   const [noteFor, setNoteFor] = useState(null);
+  const [chg, setChg] = useState(null);
   const notesQ = useDebtNotes();
   const notesBy = useMemo(() => { const m = new Map(); notesQ.data.forEach((n) => { const k = n.entity + '|' + n.customerKey; if (!m.has(k)) m.set(k, []); m.get(k).push(n); }); return m; }, [notesQ.data]);
 
@@ -166,7 +167,8 @@ export default function InvoiceDebts({ staffFilter }) {
             <div>
               <b style={{ color: 'var(--primary)' }}>{open[c.key] ? '▾' : '▸'} {c.customerName}</b>
               <span className="badge" style={{ marginLeft: 6 }}>{c.entity}</span>
-              {seeAll && <span className="small" style={{ marginLeft: 6 }}>Sale: {c.ownerEmail ? staffName(c.ownerEmail) : <span className="badge red">Chưa gán</span>}</span>}
+              {seeAll && <span className="small" style={{ marginLeft: 6 }}>Sale: {c.ownerEmail ? staffName(c.ownerEmail) : <span className="badge red">Chưa gán</span>}
+                <button className="btn sm" style={{ marginLeft: 6, padding: '1px 8px' }} title="Đổi sale phụ trách khách này" onClick={(e) => { e.stopPropagation(); setChg(c); }}>✎ Đổi sale</button></span>}
             </div>
             <div className="nowrap">
               <span className="small">HĐ </span><b>{money(c.amount)}</b>
@@ -182,9 +184,52 @@ export default function InvoiceDebts({ staffFilter }) {
         </div>
       ))}
       {imp && <ImportInvoiceDebts metas={metas} onClose={() => setImp(false)} />}
+      {chg && <ChangeSale c={chg} onClose={() => setChg(null)} />}
       {noteFor && <NoteModal c={noteFor} notes={notesBy.get(noteFor.key) || []} onClose={() => setNoteFor(null)} />}
       {card && <Statement c={card} period={metas[card.entity]?.period} asOf={metas[card.entity]?.asOf} onClose={() => setCard(null)} onlyOpen={onlyOpen} />}
     </>
+  );
+}
+
+// Đổi sale phụ trách 1 khách: cập nhật hóa đơn, công nợ tuổi nợ, lịch sử ghi nhận, và nhớ cho các lần nhập sau
+function ChangeSale({ c, onClose }) {
+  const { email, staffList, staffName } = useApp();
+  const sales = staffList.filter((s) => s.role !== 'accountant' && s.active !== false);
+  const [to, setTo] = useState(c.ownerEmail || '');
+  const [both, setBoth] = useState(true);
+  const [busy, setBusy] = useState('');
+  const [err, setErr] = useState('');
+  const k = c.list[0]?.customerKey || squash(c.customerName);
+  const run = async () => {
+    if (!to || to === c.ownerEmail) return onClose();
+    setBusy('Đang cập nhật…'); setErr('');
+    try {
+      const name = sales.find((s) => s.email === to)?.name || '';
+      const ok = (e) => both || e === c.entity;
+      const ups = [];
+      (await getDocs(query(collection(db, 'invoiceDebts'), where('customerKey', '==', k)))).docs.forEach((d) => { if (ok(d.data().entity)) ups.push([d.ref, { ownerEmail: to, ownerName: name }]); });
+      (await getDocs(collection(db, 'receivables'))).docs.forEach((d) => { const x = d.data(); if (squash(x.customerName) === k && ok(x.entity)) ups.push([d.ref, { ownerEmail: to, ownerName: name }]); });
+      (await getDocs(query(collection(db, 'debtNotes'), where('customerKey', '==', k)))).docs.forEach((d) => { if (ok(d.data().entity)) ups.push([d.ref, { custOwner: to }]); });
+      for (let i = 0; i < ups.length; i += 400) { const b = writeBatch(db); ups.slice(i, i + 400).forEach(([ref, v]) => b.update(ref, v)); await b.commit(); }
+      await setDoc(doc(db, 'settings', 'invoiceDebtAlias'), { map: { [k]: to }, updatedAt: serverTimestamp(), updatedBy: email }, { merge: true });
+      onClose();
+    } catch (e) { setErr(e.message); setBusy(''); }
+  };
+  return (
+    <Modal title={'Đổi sale phụ trách – ' + c.customerName} onClose={onClose}>
+      <p className="small">Đang gán: <b>{c.ownerEmail ? staffName(c.ownerEmail) : 'Chưa gán'}</b>. Sau khi đổi, sale mới thấy toàn bộ hóa đơn, công nợ và lịch sử ghi nhận của khách này; sale cũ không còn thấy. Các lần nhập file sau app tự gán theo sale mới.</p>
+      <div className="form-grid">
+        <label>Sale mới
+          <select value={to} onChange={(e) => setTo(e.target.value)} style={{ width: '100%' }}>
+            <option value="">— Chọn —</option>
+            {sales.map((s) => <option key={s.email} value={s.email}>{s.name || s.email}</option>)}
+          </select>
+        </label>
+        <label className="nowrap" style={{ alignSelf: 'end' }}><input type="checkbox" checked={both} onChange={(e) => setBoth(e.target.checked)} /> Áp dụng cho cả VAP và PLA (nếu khách mua ở cả 2)</label>
+      </div>
+      {err && <div className="error-box" style={{ marginTop: 8 }}>{err}</div>}
+      <div className="form-actions" style={{ marginTop: 10 }}>{busy && <span className="small">{busy}</span>}<button className="btn" onClick={onClose}>Hủy</button><button className="btn primary" disabled={!!busy || !to} onClick={run}>Lưu</button></div>
+    </Modal>
   );
 }
 

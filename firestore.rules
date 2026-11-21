@@ -101,6 +101,7 @@ service cloud.firestore {
     match /debtNotes/{id} {
       allow read: if isStaff() && (isAdmin() || isAccountant() || resource.data.by == me() || resource.data.custOwner == me());
       allow create: if isStaff() && request.resource.data.by == me() && request.resource.data.at == request.time;
+      allow update: if (isAdmin() || isAccountant()) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['custOwner']);
       allow delete: if isAdmin();
     }
 
