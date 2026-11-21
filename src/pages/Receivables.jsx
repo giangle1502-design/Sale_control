@@ -15,7 +15,7 @@ import { Empty, ErrorBox, Modal, Stat } from '../components/ui';
 // "Phân tích công nợ phải thu theo tuổi nợ" (nhóm theo "Mã nhóm khách hàng" = sale)
 // ============================================================================
 
-const DEFAULT_BUCKETS = ['1-3 ngày', '4-10 ngày', '11-15 ngày', '16-30 ngày', 'Trên 30 ngày'];
+export const DEFAULT_BUCKETS = ['1-3 ngày', '4-10 ngày', '11-15 ngày', '16-30 ngày', 'Trên 30 ngày'];
 const toMs = (v) => (v?.toMillis ? v.toMillis() : Date.parse(v) || 0);
 const squash = (s) => norm(s).replace(/ /g, '');
 

@@ -7,7 +7,22 @@ import { fmtDate, norm, num, today } from '../lib/utils';
 import { exportSheets } from '../lib/excel';
 import { cellText, readWorkbook, sheetRows, toNumber, toYmd } from '../lib/excelImport';
 import { Empty, ErrorBox, Modal, Stat } from '../components/ui';
-import { ENTITIES, entityLabel } from './Receivables';
+import { DEFAULT_BUCKETS, ENTITIES, entityLabel, entityMetas, saveSnapshot } from './Receivables';
+
+// Tuổi nợ tính từ file chi tiết theo hóa đơn: số ngày quá hạn = ngày tính − hạn thanh toán (không có hạn thì lấy ngày hóa đơn)
+const BUCKET_MAX = [3, 10, 15, 30, Infinity]; // khớp DEFAULT_BUCKETS: 1-3, 4-10, 11-15, 16-30, Trên 30 ngày
+export function agingFromInvoices(rows, asOf) {
+  const m = new Map();
+  rows.forEach((r) => {
+    const rem = num(r.remaining); if (!rem) return;
+    const k = r.customerKey;
+    if (!m.has(k)) m.set(k, { customerCode: '', customerName: r.customerName, address: '', amount: 0, overdue: 0, notDue: 0, aging: DEFAULT_BUCKETS.map(() => 0), saleGroup: '', saleGroupName: '', ownerEmail: r.ownerEmail || '', ownerName: r.ownerName || '', invoices: 0 });
+    const x = m.get(k); x.amount += rem; x.invoices++;
+    const late = daysLate(r.dueDate || r.date, asOf);
+    if (late > 0 && rem > 0) { x.overdue += rem; x.aging[BUCKET_MAX.findIndex((b) => late <= b)] += rem; } else x.notDue += rem;
+  });
+  return [...m.values()].filter((x) => Math.round(x.amount) !== 0);
+}
 
 // ============================================================================
 // Công nợ phải thu CHI TIẾT THEO HÓA ĐƠN — nhập từ MISA "Chi tiết công nợ phải thu theo hóa đơn"
@@ -244,6 +259,9 @@ function ImportInvoiceDebts({ metas, onClose }) {
   const [pick, setPick] = useState({});
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState('');
+  const [withAging, setWithAging] = useState(true);
+  const [agingDate, setAgingDate] = useState(today());
+  const recMeta = useMeta('receivables');
   const [done, setDone] = useState('');
   const alias = useMeta('invoiceDebtAlias');
   const rec = useQuery(() => collection(db, 'receivables'), []);
@@ -310,6 +328,21 @@ function ImportInvoiceDebts({ metas, onClose }) {
       // nhớ ghép tên khách ↔ sale (cả tự khớp lẫn chọn tay) để lần sau, kể cả kế toán, khớp ngay
       const learned = Object.fromEntries(custs.filter((x) => x.owner).map((x) => [x.k, x.owner]));
       await setDoc(doc(db, 'settings', 'invoiceDebtAlias'), { map: { ...(alias?.map || {}), ...learned }, updatedAt: serverTimestamp(), updatedBy: email }, { merge: true });
+      // Cập nhật luôn tab Công nợ (tuổi nợ) + Phân tích tuần từ chính file này
+      let agingNote = '';
+      if (withAging) {
+        setBusy('Đang tính tuổi nợ…');
+        const ag = agingFromInvoices(list, agingDate);
+        const rmetas = entityMetas(recMeta || {});
+        const rb = 'i' + batchId;
+        for (let i = 0; i < ag.length; i += 400) { const b = writeBatch(db); ag.slice(i, i + 400).forEach((x) => b.set(doc(collection(db, 'receivables')), { ...x, entity, batchId: rb, asOf: agingDate, source: 'invoice' })); await b.commit(); }
+        const agTotal = ag.reduce((t, x) => t + x.amount, 0);
+        await setDoc(doc(db, 'settings', 'receivables'), { entities: { ...rmetas, [entity]: { batchId: rb, asOf: agingDate, fileName, company: COMPANY[entity] || '', format: 'invoice-detail', buckets: DEFAULT_BUCKETS, rowCount: ag.length, total: agTotal, importedAt: serverTimestamp(), importedBy: email } } });
+        await saveSnapshot(entity, agingDate, DEFAULT_BUCKETS, ag);
+        const oldR = rmetas[entity]?.batchId;
+        if (oldR) { const o = await getDocs(query(collection(db, 'receivables'), where('batchId', '==', oldR))); for (let i = 0; i < o.docs.length; i += 400) { const b = writeBatch(db); o.docs.slice(i, i + 400).forEach((d) => b.delete(d.ref)); await b.commit(); } }
+        agingNote = ` Đã cập nhật tab Công nợ (tuổi nợ đến ${fmtDate(agingDate)}): ${ag.length} khách, quá hạn ${money(ag.reduce((t, x) => t + x.overdue, 0))} đ.`;
+      }
       const old = metas[entity]?.batchId;
       const total = list.reduce((t, r) => t + r.remaining, 0);
       await setDoc(doc(db, 'settings', 'invoiceDebts'), { entities: { ...metas, [entity]: { batchId, asOf: today(), period: res.period, fileName, rowCount: list.length, total, importedAt: serverTimestamp(), importedBy: email } } });
@@ -318,7 +351,7 @@ function ImportInvoiceDebts({ metas, onClose }) {
         const o = await getDocs(query(collection(db, 'invoiceDebts'), where('batchId', '==', old)));
         for (let i = 0; i < o.docs.length; i += 400) { const b = writeBatch(db); o.docs.slice(i, i + 400).forEach((d) => b.delete(d.ref)); await b.commit(); }
       }
-      setDone(`Đã nhập ${entity}: ${list.length} dòng hóa đơn của ${custs.length} khách, còn phải thu ${money(total)} đ.`); setRes(null);
+      setDone(`Đã nhập ${entity}: ${list.length} dòng hóa đơn của ${custs.length} khách, còn phải thu ${money(total)} đ.${agingNote}`); setRes(null);
     } catch (e) { setErr(e.message); }
     setBusy('');
   };
@@ -336,6 +369,11 @@ function ImportInvoiceDebts({ metas, onClose }) {
           </label>
         ))}
       </div>
+      <div className="filters" style={{ marginBottom: 10 }}>
+        <label className="nowrap"><input type="checkbox" checked={withAging} onChange={(e) => setWithAging(e.target.checked)} /> Cập nhật luôn tab <b>Công nợ (tuổi nợ)</b> và <b>Phân tích tuần</b> từ file này — không cần nhập file tuổi nợ</label>
+        {withAging && <label className="nowrap">Tính tuổi nợ đến ngày <input type="date" value={agingDate} onChange={(e) => setAgingDate(e.target.value || today())} /></label>}
+      </div>
+      {withAging && <p className="small" style={{ marginTop: -4 }}>Số ngày quá hạn = ngày tính − <b>hạn thanh toán</b> của từng hóa đơn (hóa đơn không có hạn thì tính từ <b>ngày xuất hóa đơn</b>). Chia nhóm 1-3, 4-10, 11-15, 16-30, trên 30 ngày; chưa đến hạn = trong hạn.</p>}
       <input type="file" accept=".xlsx,.xls" onChange={(e) => { if (e.target.files[0]) load(e.target.files[0]); e.target.value = ''; }} />
       {err && <div className="error-box" style={{ marginTop: 10 }}>{err}</div>}
       {done && <div className="ok-box" style={{ marginTop: 10 }}>{done}</div>}
