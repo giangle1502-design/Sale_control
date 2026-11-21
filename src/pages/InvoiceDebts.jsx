@@ -388,7 +388,8 @@ export function ImportInvoiceDebts({ metas: metas0, onClose, initialFile, defaul
       let agingNote = '';
       if (withAging) {
         setBusy('Đang tính tuổi nợ…');
-        const ag = agingFromInvoices(list, agingDate);
+        const codeBy = new Map(rec.data.filter((x) => x.customerCode).map((x) => [squash(x.customerName), x.customerCode]));
+        const ag = agingFromInvoices(list, agingDate).map((x) => ({ ...x, customerCode: codeBy.get(squash(x.customerName)) || '' }));
         const rmetas = entityMetas(recMeta || {});
         const rb = 'i' + batchId;
         for (let i = 0; i < ag.length; i += 400) { const b = writeBatch(db); ag.slice(i, i + 400).forEach((x) => b.set(doc(collection(db, 'receivables')), { ...x, entity, batchId: rb, asOf: agingDate, source: 'invoice' })); await b.commit(); }

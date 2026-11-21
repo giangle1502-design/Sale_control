@@ -78,15 +78,26 @@ export default function DebtAnalysis({ staffFilter = '' }) {
 
   const a = useMemo(() => {
     if (!cur) return null;
-    const P = new Map((prev?.rows || []).map((r) => [r.k, r]));
-    const C = new Map(cur.rows.map((r) => [r.k, r]));
+    // So khách theo TÊN (bỏ dấu, khoảng trắng) — số liệu tính từ file theo hóa đơn không có mã KH, file tuổi nợ thì có
+    const K = (r) => 'n:' + norm(r.name).replace(/ /g, '');
+    const merge = (list) => {
+      const m = new Map();
+      list.forEach((r) => {
+        const k = K(r); const o = m.get(k);
+        if (!o) m.set(k, { ...r, aging: (r.aging || []).map(num) });
+        else m.set(k, { ...o, code: o.code || r.code, group: o.group || r.group, owner: o.owner || r.owner, amount: num(o.amount) + num(r.amount), overdue: num(o.overdue) + num(r.overdue), aging: o.aging.map((v, i) => v + num(r.aging?.[i])) });
+      });
+      return m;
+    };
+    const P = merge(prev?.rows || []);
+    const C = merge(cur.rows);
     const keys = new Set([...P.keys(), ...C.keys()]);
     const rows = [...keys].map((k) => {
       const p = P.get(k); const c = C.get(k);
       const base = c || p;
       const pa = num(p?.amount); const ca = num(c?.amount);
       return {
-        k, code: base.code, name: base.name, group: base.group,
+        k, code: c?.code || p?.code || '', name: base.name, group: c?.group || p?.group || '',
         owner: staffForGroup(staffList, base.group, '')?.email || c?.owner || p?.owner || '',
         prevAmt: pa, curAmt: ca, newDebt: Math.max(0, ca - pa), collected: Math.max(0, pa - ca),
         prevOver: num(p?.overdue), curOver: num(c?.overdue),
