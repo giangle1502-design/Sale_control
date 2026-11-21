@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { connectAuthEmulator, getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+import { connectFirestoreEmulator, initializeFirestore, memoryLocalCache, memoryLruGarbageCollector, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 
 // Cấu hình web Firebase (project salecontrol-4d533). Giá trị này được phép công khai.
 const env = import.meta.env;
@@ -26,7 +26,18 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Lưu đệm dữ liệu trên máy (IndexedDB): mở lại màn hình / tải lại trang trong vòng 30 phút chỉ tính lượt đọc
+// cho bản ghi thay đổi, không đọc lại toàn bộ → tránh hết hạn mức miễn phí 50,000 lượt đọc/ngày.
+// Trình duyệt không cho IndexedDB (Zalo, khung nhúng, ẩn danh) → đệm trong bộ nhớ (giữ dữ liệu, không xóa khi rời màn hình).
+function makeDb() {
+  try {
+    return initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  } catch (e) {
+    console.warn('Firestore cache', e);
+    return initializeFirestore(app, { localCache: memoryLocalCache({ garbageCollector: memoryLruGarbageCollector() }) });
+  }
+}
+export const db = makeDb();
 export const googleProvider = new GoogleAuthProvider();
 
 if (env.VITE_USE_EMULATOR === '1') {
