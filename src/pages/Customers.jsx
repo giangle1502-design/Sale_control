@@ -513,7 +513,8 @@ function ImportCustomers({ existing, onClose }) {
       const byTax = new Map(existing.filter((c) => c.taxCode).map((c) => [norm(c.taxCode), c]));
       const byName = new Map(existing.map((c) => [norm(c.name), c]));
       const staffByEmail = new Map(staffList.map((x) => [x.email.toLowerCase(), x]));
-      const staffByName = new Map(staffList.map((x) => [norm(x.name), x]));
+      const staffByName = new Map(staffList.map((x) => [norm(x.name).replace(/ /g, ''), x]));
+      staffList.forEach((x) => { const u = String(x.email || '').split('@')[0]; if (u) staffByName.set(norm(u).replace(/ /g, ''), staffByName.get(norm(u).replace(/ /g, '')) || x); });
 
       const items = [];
       rows.slice(hr + 1).forEach((r, i) => {
@@ -524,11 +525,12 @@ function ImportCustomers({ existing, onClose }) {
         let owner = found?.ownerEmail || email;
         let problem = '';
         if (isAdmin) {
-          const oe = get('ownerEmail').toLowerCase();
-          const on = norm(get('ownerName'));
+          const oe = get('ownerEmail').toLowerCase().replace(/\s/g, '');
+          const on = norm(get('ownerName')).replace(/ /g, '');
           if (oe && staffByEmail.has(oe)) owner = oe;
           else if (on && staffByName.has(on)) owner = staffByName.get(on).email;
-          else if (oe) problem = `Email NV "${oe}" chưa có trong danh sách nhân viên → giữ NV cũ`;
+          else if (oe || on) problem = `NV "${get('ownerEmail') || get('ownerName')}" chưa có trong danh sách nhân viên → ${found ? 'giữ NV cũ' : 'gán cho người nhập'}`;
+          else if (map.ownerEmail !== undefined || map.ownerName !== undefined) problem = 'Ô NV phụ trách trống';
         } else {
           owner = email;
           if (found && found.ownerEmail !== email) problem = 'Khách của NV khác → bỏ qua';
@@ -546,12 +548,15 @@ function ImportCustomers({ existing, onClose }) {
         const custom = { ...(found?.custom || {}) };
         Object.entries(customMap).forEach(([k, idx]) => { const v = cellText(r[idx]); if (v !== '') custom[k] = v; });
         items.push({
-          line: hr + i + 2, name, found, owner, problem,
+          line: hr + i + 2, name, found, owner, problem, fileOwner: get('ownerEmail') || get('ownerName'), fileType: get('customerType'),
           skip: !isAdmin && found && found.ownerEmail !== email,
           data: { ...data, custom },
         });
       });
-      setPlan({ items, headerRow: hr + 1, mapped: Object.keys(map).length + Object.keys(customMap).length });
+      const LBL = Object.fromEntries(COLS.map(([k, l]) => [k, l]));
+      const sample = rows.slice(hr + 1).find((r) => cellText(r[map.name]));
+      const mapping = Object.entries(map).map(([k, i]) => ({ field: LBL[k] || k, header: headers[i], sample: sample ? cellText(sample[i]) : '' }));
+      setPlan({ items, headerRow: hr + 1, mapped: Object.keys(map).length + Object.keys(customMap).length, mapping, noOwner: isAdmin && map.ownerEmail === undefined && map.ownerName === undefined });
     } catch (e) { setErr(e.message); }
   };
 
@@ -600,15 +605,18 @@ function ImportCustomers({ existing, onClose }) {
             <Stat label="Khách sẽ cập nhật" value={nUpd} />
             <Stat label="Bỏ qua" value={nSkip} tone="red" />
           </div>
-          <div className="small">Dòng tiêu đề: dòng {plan.headerRow} · Nhận diện {plan.mapped} cột</div>
+          <div className="small">Dòng tiêu đề: dòng {plan.headerRow} · Nhận diện {plan.mapped} cột:{' '}
+            {plan.mapping.map((m) => <span key={m.field} className="badge" style={{ margin: '2px 4px 2px 0' }} title={'Cột trong file: ' + m.header + (m.sample ? ' · ví dụ: ' + m.sample : ' · dòng đầu trống')}>{m.field}{m.sample ? '' : ' (trống)'}</span>)}</div>
+          {plan.noOwner && <div className="error-box" style={{ marginTop: 6 }}>Không thấy cột "Email NV phụ trách" hoặc "Tên NV phụ trách" → khách mới sẽ gán cho bạn. Kiểm tra lại tiêu đề cột.</div>}
           <div className="table-wrap" style={{ maxHeight: 320, overflow: 'auto', marginTop: 6 }}>
             <table>
-              <thead><tr><th>Dòng</th><th>Khách hàng</th><th>Loại</th><th>Thao tác</th><th>NV phụ trách</th><th>Ghi chú</th></tr></thead>
+              <thead><tr><th>Dòng</th><th>Khách hàng</th><th>Loại</th><th>Thao tác</th><th>NV trong file</th><th>NV phụ trách (sau khi nhập)</th><th>Ghi chú</th></tr></thead>
               <tbody>
                 {plan.items.slice(0, 300).map((x) => (
                   <tr key={x.line}>
                     <td>{x.line}</td><td>{x.name}</td><td>{x.data.customerType || x.found?.customerType}</td>
                     <td>{x.skip ? <span className="badge red">Bỏ qua</span> : x.found ? <span className="badge blue">Cập nhật</span> : <span className="badge green">Tạo mới</span>}</td>
+                    <td className="small">{x.fileOwner || <span style={{ color: 'var(--red)' }}>(trống)</span>}</td>
                     <td>{nameOf(x.owner)}</td>
                     <td className="small">{x.problem}</td>
                   </tr>
