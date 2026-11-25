@@ -496,14 +496,25 @@ function ImportCustomers({ existing, onClose }) {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState('');
 
-  const parse = async (file) => {
+  const parse = async (file, sheetName) => {
     setErr(''); setPlan(null); setDone('');
     try {
       const wb = await readWorkbook(file);
-      const rows = sheetRows(wb);
-      const hr = detectHeaderRow(rows, ['ten', 'ma', 'sdt', 'dien thoai', 'email', 'khach', 'mst']);
-      const headers = rows[hr].map(cellText);
-      const map = guessMapping(headers, COLS.map(([key, label, aliases]) => ({ key, aliases: [label, ...aliases] })));
+      // File có nhiều sheet: tự chọn sheet có nhiều dòng đủ Tên KH + NV phụ trách nhất (không chỉ sheet đầu)
+      const KW = ['ten', 'ma', 'sdt', 'dien thoai', 'email', 'khach', 'mst'];
+      const FIELDS = COLS.map(([key, label, aliases]) => ({ key, aliases: [label, ...aliases] }));
+      const look = (name) => {
+        const rs = sheetRows(wb, name); if (!rs.length) return null;
+        const h = detectHeaderRow(rs, KW); const hd = (rs[h] || []).map(cellText); const mp = guessMapping(hd, FIELDS);
+        if (mp.name === undefined) return { name, rows: rs, hr: h, headers: hd, map: mp, score: -1 };
+        const body = rs.slice(h + 1).filter((r) => cellText(r[mp.name]));
+        const own = body.filter((r) => (mp.ownerEmail !== undefined && cellText(r[mp.ownerEmail])) || (mp.ownerName !== undefined && cellText(r[mp.ownerName]))).length;
+        return { name, rows: rs, hr: h, headers: hd, map: mp, score: body.length + own * 2 + Object.keys(mp).length };
+      };
+      const sheets = wb.SheetNames.map(look).filter(Boolean);
+      const pick = sheets.find((x) => x.name === sheetName) || [...sheets].sort((a, b) => b.score - a.score)[0];
+      if (!pick) throw new Error('File không có dữ liệu.');
+      const rows = pick.rows; const hr = pick.hr; const headers = pick.headers; const map = pick.map;
       const customMap = {};
       fields.forEach((f) => { const i = headers.findIndex((h) => norm(h) === norm(f.label)); if (i >= 0) customMap[f.key] = i; });
       if (map.name === undefined) throw new Error('Không tìm thấy cột "Tên KH" trong file. Hãy dùng File mẫu.');
@@ -521,7 +532,8 @@ function ImportCustomers({ existing, onClose }) {
         const get = (k) => (map[k] === undefined ? '' : cellText(r[map[k]]));
         const name = get('name');
         if (!name) return;
-        const found = byId.get(get('id')) || (get('code') && byCode.get(norm(get('code')))) || (get('taxCode') && byTax.get(norm(get('taxCode')))) || byName.get(norm(name));
+        const tax0 = /^\d{9}$/.test(get('taxCode')) ? '0' + get('taxCode') : get('taxCode');
+        const found = byId.get(get('id')) || (get('code') && byCode.get(norm(get('code')))) || (tax0 && (byTax.get(norm(tax0)) || byTax.get(norm(get('taxCode'))))) || byName.get(norm(name));
         let owner = found?.ownerEmail || email;
         let problem = '';
         if (isAdmin) {
@@ -540,6 +552,7 @@ function ImportCustomers({ existing, onClose }) {
           if (['id', 'ownerEmail', 'ownerName'].includes(k) || map[k] === undefined) return;
           const v = get(k);
           if (k === 'customerType') data[k] = toType(v, found?.customerType || 'Khách mới');
+          else if (k === 'taxCode') { const t = /^\d{9}$/.test(v) || /^\d{12}$/.test(v) ? '0' + v : v; if (t !== '' || !found) data[k] = t; } // Excel mất số 0 đầu của MST
           else if (k === 'monthlyVolume') { if (v !== '') data[k] = builtinType(config, 'customers', 'monthlyVolume') === 'number' ? toNumber(v) : v; }
           else if (v !== '' || !found) data[k] = v;
         });
@@ -556,7 +569,7 @@ function ImportCustomers({ existing, onClose }) {
       const LBL = Object.fromEntries(COLS.map(([k, l]) => [k, l]));
       const sample = rows.slice(hr + 1).find((r) => cellText(r[map.name]));
       const mapping = Object.entries(map).map(([k, i]) => ({ field: LBL[k] || k, header: headers[i], sample: sample ? cellText(sample[i]) : '' }));
-      setPlan({ items, headerRow: hr + 1, mapped: Object.keys(map).length + Object.keys(customMap).length, mapping, noOwner: isAdmin && map.ownerEmail === undefined && map.ownerName === undefined });
+      setPlan({ file, sheet: pick.name, sheets: sheets.map((x) => x.name), items, headerRow: hr + 1, mapped: Object.keys(map).length + Object.keys(customMap).length, mapping, noOwner: isAdmin && map.ownerEmail === undefined && map.ownerName === undefined });
     } catch (e) { setErr(e.message); }
   };
 
@@ -605,6 +618,8 @@ function ImportCustomers({ existing, onClose }) {
             <Stat label="Khách sẽ cập nhật" value={nUpd} />
             <Stat label="Bỏ qua" value={nSkip} tone="red" />
           </div>
+          {plan.sheets.length > 1 && <div className="small" style={{ margin: '6px 0' }}>File có {plan.sheets.length} sheet — đang đọc sheet:{' '}
+            <select value={plan.sheet} onChange={(e) => parse(plan.file, e.target.value)}>{plan.sheets.map((n) => <option key={n} value={n}>{n}</option>)}</select></div>}
           <div className="small">Dòng tiêu đề: dòng {plan.headerRow} · Nhận diện {plan.mapped} cột:{' '}
             {plan.mapping.map((m) => <span key={m.field} className="badge" style={{ margin: '2px 4px 2px 0' }} title={'Cột trong file: ' + m.header + (m.sample ? ' · ví dụ: ' + m.sample : ' · dòng đầu trống')}>{m.field}{m.sample ? '' : ' (trống)'}</span>)}</div>
           {plan.noOwner && <div className="error-box" style={{ marginTop: 6 }}>Không thấy cột "Email NV phụ trách" hoặc "Tên NV phụ trách" → khách mới sẽ gán cho bạn. Kiểm tra lại tiêu đề cột.</div>}
