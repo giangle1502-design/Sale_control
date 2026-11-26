@@ -108,15 +108,30 @@ export function compareCustomer(a, b) {
 // ---------------------------------------------------------------------------
 // Chỉ mục khách hàng: customerIndex/{customerId} = { n: tên, c: mã, t: MST, o: email sale, p: người liên hệ, a: địa chỉ }
 export const indexEntry = (c) => ({ n: c.name || '', c: c.code || '', t: c.taxCode || '', o: c.ownerEmail || '', p: c.contact || '', a: c.address || '' });
-export const writeIndex = (id, c) => setDoc(doc(db, 'customerIndex', id), indexEntry(c)).catch(() => {});
-export const removeIndex = (id) => deleteDoc(doc(db, 'customerIndex', id)).catch(() => {});
-export async function loadIndex() {
+// Bộ nhớ đệm chỉ mục (giảm lượt đọc Firestore): giữ trong trang + localStorage 2 giờ, tự cập nhật khi chính mình thêm/sửa/xóa
+const IDX_LS = 'ci.cache.v1'; const IDX_TTL = 2 * 3600e3;
+let idxMem = null;
+const idxSave = () => { try { localStorage.setItem(IDX_LS, JSON.stringify(idxMem)); } catch { /* bỏ qua */ } };
+const idxPatch = (fn) => { if (idxMem) { idxMem = { ...idxMem, list: fn(idxMem.list) }; idxSave(); } };
+export const writeIndex = (id, c) => {
+  const e = indexEntry(c); idxPatch((l) => [...l.filter((x) => x.id !== id), { id, ...e }]);
+  return setDoc(doc(db, 'customerIndex', id), e).catch(() => {});
+};
+export const removeIndex = (id) => { idxPatch((l) => l.filter((x) => x.id !== id)); return deleteDoc(doc(db, 'customerIndex', id)).catch(() => {}); };
+export async function loadIndex(fresh = false) {
+  if (!idxMem) { try { idxMem = JSON.parse(localStorage.getItem(IDX_LS) || 'null'); } catch { idxMem = null; } }
+  if (!fresh && idxMem && Date.now() - idxMem.at < IDX_TTL) return idxMem.list;
   const s = await getDocs(collection(db, 'customerIndex'));
-  return s.docs.map((d) => ({ id: d.id, ...d.data() }));
+  idxMem = { at: Date.now(), list: s.docs.map((d) => ({ id: d.id, ...d.data() })) }; idxSave();
+  return idxMem.list;
 }
 // Admin: đồng bộ chỉ mục với toàn bộ danh sách khách (thêm/sửa/xóa phần lệch)
 export async function syncIndex(customers) {
-  const idx = await loadIndex();
+  // Mỗi máy quản trị chỉ đồng bộ tối đa 1 lần / 12 giờ (mỗi lần đọc toàn bộ chỉ mục)
+  const K = 'ci.sync.at'; let last = 0; try { last = Number(localStorage.getItem(K) || 0); } catch { /* bỏ qua */ }
+  if (Date.now() - last < 12 * 3600e3) return 0;
+  try { localStorage.setItem(K, String(Date.now())); } catch { /* bỏ qua */ }
+  const idx = await loadIndex(true);
   const byId = new Map(idx.map((x) => [x.id, x]));
   const live = new Set(customers.map((c) => c.id));
   const ops = [];
@@ -130,6 +145,7 @@ export async function syncIndex(customers) {
     ops.slice(i, i + 400).forEach(([t, id, e]) => (t === 'set' ? b.set(doc(db, 'customerIndex', id), e) : b.delete(doc(db, 'customerIndex', id))));
     await b.commit();
   }
+  if (ops.length) idxPatch((l) => { const m = new Map(l.map((x) => [x.id, x])); ops.forEach(([t, id, e]) => (t === 'set' ? m.set(id, { id, ...e }) : m.delete(id))); return [...m.values()]; });
   return ops.length;
 }
 
