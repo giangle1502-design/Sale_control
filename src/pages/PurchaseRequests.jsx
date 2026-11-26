@@ -125,7 +125,7 @@ export default function PurchaseRequests() {
                     {isAdmin && <td>{staffName(r.ownerEmail)}</td>}
                     <td style={{ minWidth: 160 }}><b>{r.productCode}</b>{r.productName && <div className="small">{r.productName}</div>}
                       {r.note && <div className="small">📝 {r.note}</div>}</td>
-                    <td className="num nowrap"><b>{num(r.qty).toLocaleString('vi-VN')}</b> {r.unit}</td>
+                    <td className="num nowrap"><b>{num(r.qty).toLocaleString('en-US')}</b> {r.unit}</td>
                     <td className="nowrap">{fmtDate(r.deliveryDate)} <UrgencyBadge r={r} /></td>
                     <td>{r.customerName}</td>
                     <td className="num">{r.price ? fmtMoney(r.price) : '-'}</td>
@@ -236,7 +236,7 @@ function HandleForm({ r, onClose }) {
     <Modal title="Xác nhận đã xử lý yêu cầu mua hàng" onClose={onClose}>
       <form onSubmit={submit}>
         <p className="small">
-          <b>{r.productCode}</b> – {num(r.qty).toLocaleString('vi-VN')} {r.unit} cho <b>{r.customerName}</b>, cần giao {fmtDate(r.deliveryDate)} (sale {staffName(r.ownerEmail)}).
+          <b>{r.productCode}</b> – {num(r.qty).toLocaleString('en-US')} {r.unit} cho <b>{r.customerName}</b>, cần giao {fmtDate(r.deliveryDate)} (sale {staffName(r.ownerEmail)}).
         </p>
         <div className="form-grid">
           <Field label="Ngày xử lý"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>

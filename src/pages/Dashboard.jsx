@@ -114,7 +114,7 @@ export default function Dashboard() {
                   <td className="nowrap">{fmtDate(r.date)}</td>
                   {isAdmin && <td>{staffName(r.ownerEmail)}</td>}
                   <td><b>{r.productCode}</b></td>
-                  <td className="num nowrap">{num(r.qty).toLocaleString('vi-VN')} {r.unit}</td>
+                  <td className="num nowrap">{num(r.qty).toLocaleString('en-US')} {r.unit}</td>
                   <td>{r.customerName}</td>
                   <td className="nowrap">Giao {fmtDate(r.deliveryDate)} <UrgencyBadge r={r} /></td>
                 </tr>

@@ -50,7 +50,7 @@ export function renderEmail({ rep, date, config, data, appUrl }) {
         const soonR = !lateR && r.deliveryDate && r.deliveryDate <= soon;
         return `<tr${lateR ? ' style="background:#fdecea"' : soonR ? ' style="background:#fff4e0"' : ''}><td ${td}>${fmtDate(r.date)}</td><td ${td}>${nm(r.ownerEmail)}</td>
         <td ${td}><b>${esc(r.productCode)}</b>${r.productName ? `<div style="font-size:11px;color:#6b7684">${esc(r.productName)}</div>` : ''}</td>
-        <td ${tdr}>${num(r.qty).toLocaleString('vi-VN')} ${esc(r.unit || '')}</td>
+        <td ${tdr}>${num(r.qty).toLocaleString('en-US')} ${esc(r.unit || '')}</td>
         <td ${td}>${lateR ? `<b style="color:#c62828">${fmtDate(r.deliveryDate)} (quá hạn)</b>` : soonR ? `<b style="color:#b26a00">${fmtDate(r.deliveryDate)} (sắp đến)</b>` : fmtDate(r.deliveryDate)}</td>
         <td ${td}>${esc(r.customerName)}</td><td ${tdr}>${r.price ? fmtMoney(r.price) : ''}</td><td ${td}>${esc(r.note)}</td></tr>`;
       })
@@ -83,7 +83,7 @@ export function renderEmail({ rep, date, config, data, appUrl }) {
     const itemCols = cf.items || [];
     const itemStr = (i) => {
       const extra = itemCols.map((c) => (i.custom?.[c.key] ? `${c.label}: ${i.custom[c.key]}` : '')).filter(Boolean).join(', ');
-      return `${i.productCode ? '[' + i.productCode + '] ' : ''}${i.product} ${i.grade || ''}${extra ? ' (' + extra + ')' : ''} ${num(i.qtyKg).toLocaleString('vi-VN')}kg × ${fmtMoney(i.priceKg)}`;
+      return `${i.productCode ? '[' + i.productCode + '] ' : ''}${i.product} ${i.grade || ''}${extra ? ' (' + extra + ')' : ''} ${num(i.qtyKg).toLocaleString('en-US')}kg × ${fmtMoney(i.priceKg)}`;
     };
     html += h('Báo giá gửi trong ngày') + table(
       `<tr><th ${th}>Số BG</th><th ${th}>NV</th><th ${th}>Khách hàng</th><th ${th}>Sản phẩm</th><th ${th}>Tấn</th><th ${th}>Giá trị</th><th ${th}>Trạng thái</th></tr>`,

@@ -31,9 +31,9 @@ export const num = (v) => {
   const n = Number(String(v ?? '').replace(/,/g, ''));
   return Number.isFinite(n) ? n : 0;
 };
-export const fmtMoney = (v) => Math.round(num(v)).toLocaleString('vi-VN');
+export const fmtMoney = (v) => Math.round(num(v)).toLocaleString('en-US');
 export const fmtNum = (v, digits = 2) =>
-  num(v).toLocaleString('vi-VN', { maximumFractionDigits: digits });
+  num(v).toLocaleString('en-US', { maximumFractionDigits: digits });
 export const fmtTon = (kg) => fmtNum(num(kg) / 1000, 3);
 
 export const ORDER_STATUSES = ['Đã chốt', 'Đang giao', 'Hoàn thành', 'Hủy'];

@@ -9,6 +9,7 @@ import { exportSheets } from '../lib/excel';
 import CustomerPicker from '../components/CustomerPicker';
 import ItemsTable, { blankItem, cleanItems, itemText } from '../components/ItemsTable';
 import AddFieldButton from '../components/AddFieldButton';
+import CompanyPicker, { companyOf, lastCompany, rememberCompany, useCompanies } from '../components/CompanyPicker';
 import { OrderForm, newOrderNo } from './Orders';
 import {
   confirmDelete, CustomFieldInputs, customValue, Empty, ErrorBox, Field, FilterBar, Modal, Stat, useRange,
@@ -17,6 +18,7 @@ import {
 const TONE = { 'Nháp': '', 'Đã gửi': 'blue', 'KH chấp nhận': 'amber', 'KH từ chối': 'red', 'Hết hạn': 'red', 'Đã tạo đơn': 'green' };
 const blank = (config) => ({
   quoteNo: 'BG' + today().replace(/-/g, '').slice(2) + '-' + Math.random().toString(36).slice(2, 5).toUpperCase(),
+  company: lastCompany() || 'VAP',
   date: today(), validUntil: addDays(today(), 7), customerId: '', customerName: '', attention: '',
   items: [blankItem()], vatPct: 0, paymentTerms: '', deliveryTerms: '', terms: config.quoteTerms || '',
   status: 'Đã gửi', note: '', custom: {},
@@ -31,6 +33,7 @@ export default function Quotes() {
   const [confirm, setConfirm] = useState(null);
   const fields = config.customFields.quotes || [];
   const cols = config.customFields.items || [];
+  const companies = useCompanies();
 
   const { data, error } = useQuery(
     () => scopedQuery('quotes', { me: email, isAdmin, staffFilter: staff, ...range }),
@@ -57,7 +60,7 @@ export default function Quotes() {
 
   const doExport = () => exportSheets(`BaoGia_${range.from}_${range.to}`, {
     'Báo giá': rows.map((r) => ({
-      'Số BG': r.quoteNo, Ngày: fmtDate(r.date), 'Hiệu lực đến': fmtDate(r.validUntil), 'Nhân viên': staffName(r.ownerEmail),
+      'Số BG': r.quoteNo, 'Công ty': r.company || '', Ngày: fmtDate(r.date), 'Hiệu lực đến': fmtDate(r.validUntil), 'Nhân viên': staffName(r.ownerEmail),
       'Khách hàng': r.customerName, 'Sản phẩm': (r.items || []).map((i) => itemText(i, cols)).join('; '),
       'Tổng kg': orderKg(r), 'Tổng tiền': Math.round(orderAmount(r)), 'Trạng thái': r.status, 'Số ĐH': r.orderNo || '',
       ...Object.fromEntries(fields.map((f) => [f.label, customValue(f, r.custom?.[f.key])])),
@@ -89,7 +92,7 @@ export default function Quotes() {
         {rows.length === 0 ? <Empty /> : (
           <table>
             <thead><tr>
-              <th>Số BG</th><th>Ngày</th>{isAdmin && <th>Nhân viên</th>}<th>Khách hàng</th><th>Sản phẩm</th>
+              <th>Số BG</th><th>Công ty</th><th>Ngày</th>{isAdmin && <th>Nhân viên</th>}<th>Khách hàng</th><th>Sản phẩm</th>
               <th className="num">Tấn</th><th className="num">Tổng tiền</th><th>Hiệu lực</th><th>Trạng thái</th>
               {fields.map((f) => <th key={f.key}>{f.label}</th>)}<th></th>
             </tr></thead>
@@ -100,6 +103,7 @@ export default function Quotes() {
                 return (
                   <tr key={r.id}>
                     <td className="nowrap">{r.quoteNo}</td>
+                    <td className="nowrap">{r.company || <span className="small">—</span>}</td>
                     <td className="nowrap">{fmtDate(r.date)}</td>
                     {isAdmin && <td>{staffName(r.ownerEmail)}</td>}
                     <td>{r.customerName}</td>
@@ -110,7 +114,7 @@ export default function Quotes() {
                     <td><span className={'badge ' + (TONE[r.status] || '')}>{r.status}</span>{r.orderNo && <div className="small">→ {r.orderNo}</div>}</td>
                     {fields.map((f) => <td key={f.key}>{String(customValue(f, r.custom?.[f.key]))}</td>)}
                     <td className="nowrap">
-                      <button className="btn sm" onClick={() => printQuote(r, config, staffName)}>In</button>{' '}
+                      <button className="btn sm" onClick={() => printQuote(r, config, staffName, companies)}>In</button>{' '}
                       {mine && r.status !== 'Đã tạo đơn' && r.status !== 'KH từ chối' && (
                         <button className="btn sm primary" onClick={() => toOrder(r)}>✔ Xác nhận tạo đơn</button>
                       )}{' '}
@@ -134,6 +138,7 @@ export default function Quotes() {
 
 function QuoteForm({ initial, onClose }) {
   const { profile, config, staffName } = useApp();
+  const companies = useCompanies();
   const fields = config.customFields.quotes || [];
   const [f, setF] = useState({ ...blank(config), ...initial, custom: initial.custom || {}, items: initial.items?.length ? initial.items : [blankItem()] });
   const [busy, setBusy] = useState(false);
@@ -146,12 +151,16 @@ function QuoteForm({ initial, onClose }) {
       const cust = await ensureCustomer(f, profile);
       const { id, ownerEmail, ownerName, createdAt, createdBy, updatedAt, updatedBy, ...rest } = f;
       const items = cleanItems(rest.items);
+      const co = companyOf(companies, rest.company);
+      if (!co) throw new Error('Chọn công ty đứng tên báo giá');
+      const { code: _c, ...companyInfo } = co;
       const data = {
-        ...rest, ...cust, items, vatPct: num(rest.vatPct),
+        ...rest, ...cust, items, companyInfo, vatPct: num(rest.vatPct),
         totalKg: orderKg({ items }), totalAmount: Math.round(orderAmount({ items, vatPct: rest.vatPct })),
       };
       await saveDoc('quotes', id, data, profile);
-      if (andPrint) printQuote({ ...f, ...data, ownerEmail: f.ownerEmail || profile.email }, config, staffName);
+      rememberCompany(rest.company);
+      if (andPrint) printQuote({ ...f, ...data, ownerEmail: f.ownerEmail || profile.email }, config, staffName, companies);
       onClose();
     } catch (e2) { setErr(e2.message); setBusy(false); }
   };
@@ -160,6 +169,7 @@ function QuoteForm({ initial, onClose }) {
     <Modal title={f.id ? 'Sửa báo giá' : 'Tạo báo giá'} onClose={onClose} wide>
       <form onSubmit={(e) => { e.preventDefault(); save(false); }}>
         <div className="form-grid">
+          <Field label="Công ty báo giá" required full><CompanyPicker value={f.company} onChange={(company) => setF({ ...f, company })} required /></Field>
           <Field label="Số báo giá" required><input value={f.quoteNo} onChange={set('quoteNo')} required /></Field>
           <Field label="Ngày báo giá" required><input type="date" value={f.date} onChange={set('date')} required /></Field>
           <Field label="Khách hàng" required full><CustomerPicker value={f} onChange={(c) => setF({ ...f, ...c })} required /></Field>
@@ -195,7 +205,13 @@ function QuoteForm({ initial, onClose }) {
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // Mở cửa sổ in báo giá (in ra giấy hoặc "Lưu thành PDF" để gửi khách)
-export function printQuote(q, config, staffName) {
+export function printQuote(q, config, staffName, companies = []) {
+  // Công ty đứng tên: ưu tiên thông tin đang có trong danh mục, nếu không có thì dùng bản lưu kèm báo giá
+  const co = { ...(q.companyInfo || {}), ...(companyOf(companies, q.company) || {}) };
+  const coName = co.name || config.companyName;
+  const coAddr = co.name ? co.address : config.companyAddress;
+  const coTax = co.name ? co.taxCode : config.companyTaxCode;
+  const coPhone = co.name ? co.phone : config.companyPhone;
   const cols = config.customFields.items || [];
   const sub = (q.items || []).reduce((s, it) => s + num(it.qtyKg) * num(it.priceKg), 0);
   const vat = sub * num(q.vatPct) / 100;
@@ -207,15 +223,15 @@ export function printQuote(q, config, staffName) {
   const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(q.quoteNo)}</title>
   <style>
     body{font-family:Arial,sans-serif;color:#111;margin:32px;font-size:13px}
-    .head{display:flex;justify-content:space-between;border-bottom:2px solid #14213d;padding-bottom:10px}
+    .head{display:flex;justify-content:space-between;gap:16px;border-bottom:2px solid #14213d;padding-bottom:10px} .head>div:first-child{max-width:72%;line-height:1.5} .head>div:last-child{white-space:nowrap}
     .co{font-size:16px;font-weight:700;color:#14213d} h1{text-align:center;font-size:22px;margin:22px 0 4px;letter-spacing:1px}
     .no{text-align:center;color:#555;margin-bottom:16px} table{width:100%;border-collapse:collapse;margin-top:10px}
     th,td{border:1px solid #999;padding:6px 8px} th{background:#eef1f5} .r{text-align:right} .c{text-align:center}
     .info td{border:none;padding:3px 0} .sign{display:flex;justify-content:space-between;margin-top:40px;text-align:center}
     .sign div{width:40%} @media print{body{margin:12mm} .noprint{display:none}}
   </style></head><body>
-  <div class="head"><div><div class="co">${esc(config.companyName)}</div>
-    <div>${esc(config.companyAddress)}</div><div>${config.companyPhone ? 'ĐT: ' + esc(config.companyPhone) : ''} ${config.companyTaxCode ? ' · MST: ' + esc(config.companyTaxCode) : ''}</div></div>
+  <div class="head"><div><div class="co">${esc(coName)}</div>
+    ${coTax ? `<div>MST: ${esc(coTax)}</div>` : ''}${coAddr ? `<div>Địa chỉ: ${esc(coAddr)}</div>` : ''}${coPhone ? `<div>ĐT: ${esc(coPhone)}</div>` : ''}</div>
     <div style="text-align:right">Ngày: ${fmtDate(q.date)}<br>Hiệu lực đến: ${fmtDate(q.validUntil)}</div></div>
   <h1>BẢNG BÁO GIÁ</h1><div class="no">Số: ${esc(q.quoteNo)}</div>
   <table class="info"><tr><td style="width:130px">Kính gửi:</td><td><b>${esc(q.customerName)}</b></td></tr>
@@ -232,7 +248,7 @@ export function printQuote(q, config, staffName) {
   ${q.deliveryTerms ? `<p><b>Giao hàng:</b> ${esc(q.deliveryTerms)}</p>` : ''}
   ${q.terms ? `<p><b>Ghi chú:</b> ${esc(q.terms).replace(/\n/g, '<br>')}</p>` : ''}
   <div class="sign"><div><b>XÁC NHẬN CỦA KHÁCH HÀNG</b><br><i>(Ký, ghi rõ họ tên)</i></div>
-    <div><b>${esc(config.companyName)}</b><br><i>(Ký, ghi rõ họ tên)</i><br><br><br><br>${esc(staffName(q.ownerEmail))}</div></div>
+    <div><b>${esc(coName)}</b><br><i>(Ký, ghi rõ họ tên)</i><br><br><br><br>${esc(staffName(q.ownerEmail))}</div></div>
   <p class="noprint" style="margin-top:30px;text-align:center"><button onclick="window.print()" style="padding:8px 20px;font-size:14px">In / Lưu PDF</button></p>
   <script>setTimeout(()=>window.print(),300)</script>
   </body></html>`;
