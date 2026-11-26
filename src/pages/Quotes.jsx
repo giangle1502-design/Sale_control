@@ -238,7 +238,7 @@ export function printQuote(q, config, staffName, companies = []) {
     ${q.attention ? `<tr><td>Người nhận:</td><td>${esc(q.attention)}</td></tr>` : ''}
     <tr><td>Nhân viên phụ trách:</td><td>${esc(staffName(q.ownerEmail))}</td></tr></table>
   <p>Chúng tôi xin trân trọng gửi đến Quý khách bảng báo giá như sau:</p>
-  <table><thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>Grade</th>${cols.map((c) => `<th>${esc(c.label)}</th>`).join('')}
+  <table><thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>Xuất xứ</th>${cols.map((c) => `<th>${esc(c.label)}</th>`).join('')}
     <th>SL (kg)</th><th>Đơn giá (đ/kg)</th><th>Thành tiền (đ)</th></tr></thead>
   <tbody>${rows}
     <tr><td colspan="${span}" class="r">Cộng tiền hàng</td><td class="r">${fmtMoney(sub)}</td></tr>

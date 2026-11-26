@@ -57,7 +57,7 @@ export default function ItemsTable({ items, onChange }) {
         <table>
           <thead>
             <tr>
-              <th>Mã hàng</th><th>Tên hàng / Loại hạt</th><th>Grade</th>
+              <th>Mã hàng</th><th>Tên hàng / Loại hạt</th><th>Xuất xứ</th>
               {cols.map((c) => <th key={c.key}>{c.label}</th>)}
               <th className="num">SL (kg)</th><th className="num">Đơn giá (đ/kg)</th><th className="num">Thành tiền</th><th></th>
             </tr>
@@ -67,7 +67,7 @@ export default function ItemsTable({ items, onChange }) {
               <tr key={i}>
                 <td style={{ minWidth: 120 }}><input list="product-code-list" value={it.productCode || ''} onChange={(e) => pickCode(i, e.target.value)} placeholder="Gõ mã…" /></td>
                 <td style={{ minWidth: 140 }}><input list="product-list" value={it.product} onChange={(e) => setItem(i, { product: e.target.value })} placeholder="PP, PE…" /></td>
-                <td style={{ minWidth: 100 }}><input value={it.grade} onChange={(e) => setItem(i, { grade: e.target.value })} placeholder="VD: T30S" /></td>
+                <td style={{ minWidth: 100 }}><input value={it.grade} onChange={(e) => setItem(i, { grade: e.target.value })} placeholder="VD: Hàn Quốc" /></td>
                 {cols.map((c) => (
                   <td key={c.key} style={{ minWidth: 100 }}>
                     <CellInput f={c} value={it.custom?.[c.key]} onChange={(v) => setCustom(i, c.key, v)} />
